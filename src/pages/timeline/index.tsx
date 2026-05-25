@@ -16,8 +16,18 @@ import {
   ClipboardCheck,
   Settings,
   Users,
-  FileText
+  FileText,
+  Clock
 } from 'lucide-react-taro'
+
+// 后端配置的工作项
+interface WorkflowConfig {
+  id: number
+  content: string
+  order: number
+  remindMinutes: number
+  remindType: 'boarding' | 'departure'
+}
 
 interface TimelineItem {
   id: number
@@ -42,6 +52,7 @@ export default function Timeline() {
   const [departureDate, setDepartureDate] = useState<Date | null>(null)
   const [boardingDate, setBoardingDate] = useState<Date | null>(null)
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
+  const [workflowConfig, setWorkflowConfig] = useState<WorkflowConfig[]>([])
   const [currentTime, setCurrentTime] = useState(new Date())
   const [loading, setLoading] = useState(false)
   const [expandedId, setExpandedId] = useState<number | null>(null)
@@ -49,6 +60,25 @@ export default function Timeline() {
   const [alertItem, setAlertItem] = useState<TimelineItem | null>(null)
   const notifiedItems = useRef<Set<number>>(new Set())
   const isMiniApp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP || Taro.getEnv() === Taro.ENV_TYPE.TT
+
+  // 获取后端配置
+  const fetchWorkflowConfig = useCallback(async () => {
+    try {
+      const res = await Network.request({
+        url: '/api/workflow/items',
+        method: 'GET'
+      })
+      console.log('获取工作流程配置:', res.data)
+      if (res.data?.code === 200 && res.data?.data) {
+        const config = res.data.data.sort((a: WorkflowConfig, b: WorkflowConfig) => a.order - b.order)
+        setWorkflowConfig(config)
+        return config
+      }
+    } catch (error) {
+      console.error('获取配置失败', error)
+    }
+    return null
+  }, [])
 
   // 初始化数据
   useEffect(() => {
@@ -83,15 +113,54 @@ export default function Timeline() {
         console.error('解析航班数据失败', e)
       }
     }
+
+    // 获取后端配置
+    fetchWorkflowConfig()
+  }, [fetchWorkflowConfig])
+
+  // 生成时间线 - 根据后端配置
+  const generateTimelineFromConfig = useCallback((config: WorkflowConfig[], boarding: Date, departure: Date): TimelineItem[] => {
+    const iconMap: Record<number, string> = {
+      1: 'Users', 2: 'Luggage', 3: 'ClipboardCheck', 4: 'Luggage',
+      5: 'FileText', 6: 'Settings', 7: 'ClipboardCheck', 8: 'ClipboardCheck'
+    }
+
+    return config.map((item) => {
+      // 根据 remindType 计算提醒时间
+      const baseTime = item.remindType === 'boarding' ? boarding : departure
+      const remindTime = new Date(baseTime.getTime() - item.remindMinutes * 60 * 1000)
+      
+      // 生成时间标签
+      let timeLabel: string
+      if (item.remindMinutes === 0) {
+        timeLabel = item.remindType === 'boarding' 
+          ? `登机时间 (${formatTime(remindTime)})`
+          : `起飞时间 (${formatTime(remindTime)})`
+      } else {
+        const typeText = item.remindType === 'boarding' ? '登机前' : '起飞前'
+        timeLabel = `${typeText}${item.remindMinutes}分钟 (${formatTime(remindTime)})`
+      }
+
+      return {
+        id: item.id,
+        title: item.content,
+        description: item.content,
+        time: remindTime,
+        timeLabel,
+        type: item.remindType === 'boarding' ? 'boarding' : 'departure',
+        icon: iconMap[item.id % 8] || 'Circle',
+        confirmed: false
+      }
+    }).sort((a, b) => a.time.getTime() - b.time.getTime())
   }, [])
 
   // 生成时间线数据
   useEffect(() => {
-    if (departureDate && boardingDate) {
-      const items = generateTimeline(boardingDate, departureDate)
+    if (departureDate && boardingDate && workflowConfig.length > 0) {
+      const items = generateTimelineFromConfig(workflowConfig, boardingDate, departureDate)
       setTimeline(items)
     }
-  }, [departureDate, boardingDate])
+  }, [departureDate, boardingDate, workflowConfig, generateTimelineFromConfig])
 
   // 更新当前时间
   useEffect(() => {
@@ -184,105 +253,6 @@ export default function Timeline() {
     checkReminders()
   }, [checkReminders])
 
-  // 生成时间线
-  const generateTimeline = (boarding: Date, departure: Date): TimelineItem[] => {
-    const items: TimelineItem[] = []
-
-    // 1. 登机前15分钟 - 轮椅无陪
-    const wheelchairTime = new Date(boarding.getTime() - 15 * 60 * 1000)
-    items.push({
-      id: 1,
-      title: '轮椅无陪信息确认',
-      description: '请确认是否有需要轮椅服务的无陪旅客',
-      time: wheelchairTime,
-      timeLabel: `登机前15分钟 (${formatTime(wheelchairTime)})`,
-      type: 'wheelchair',
-      icon: 'Users',
-      confirmed: false
-    })
-
-    // 2. 起飞前20分钟 - 行李预拉
-    const luggagePreTime = new Date(departure.getTime() - 20 * 60 * 1000)
-    items.push({
-      id: 2,
-      title: '行李预拉确认',
-      description: '确认行李预拉准备工作已完成',
-      time: luggagePreTime,
-      timeLabel: `起飞前20分钟 (${formatTime(luggagePreTime)})`,
-      type: 'luggage',
-      icon: 'Luggage',
-      confirmed: false
-    })
-
-    // 3. 起飞前17分钟 - 综合确认
-    const comprehensiveTime = new Date(departure.getTime() - 17 * 60 * 1000)
-    items.push({
-      id: 3,
-      title: '综合确认',
-      description: '行李预拉确认、舱单确认、货舱通知关闭、特殊情况与机长交接',
-      time: comprehensiveTime,
-      timeLabel: `起飞前17分钟 (${formatTime(comprehensiveTime)})`,
-      type: 'comprehensive',
-      icon: 'ClipboardCheck',
-      confirmed: false
-    })
-
-    // 4. 起飞前16分钟 - 行李拉下
-    const luggageDropTime = new Date(departure.getTime() - 16 * 60 * 1000)
-    items.push({
-      id: 4,
-      title: '行李拉下操作',
-      description: '完成行李拉下操作，并在系统中确认',
-      time: luggageDropTime,
-      timeLabel: `起飞前16分钟 (${formatTime(luggageDropTime)})`,
-      type: 'luggage-drop',
-      icon: 'Luggage',
-      confirmed: false
-    })
-
-    // 5. 起飞前15分钟 - 舱单和货舱确认
-    const cargoConfirmTime = new Date(departure.getTime() - 15 * 60 * 1000)
-    items.push({
-      id: 5,
-      title: '舱单和货舱确认',
-      description: '确认舱单和货舱通知已关闭',
-      time: cargoConfirmTime,
-      timeLabel: `起飞前15分钟 (${formatTime(cargoConfirmTime)})`,
-      type: 'cargo',
-      icon: 'FileText',
-      confirmed: false
-    })
-
-    // 6. 登机时间 - 现场准备
-    items.push({
-      id: 6,
-      title: '现场准备确认',
-      description: '确认登机口设备、系统、门禁及栏杆等现场准备；特殊行李预告单和登机口变更告示情况',
-      time: boarding,
-      timeLabel: `登机时间 (${formatTime(boarding)})`,
-      type: 'site-prep',
-      icon: 'Settings',
-      confirmed: false
-    })
-
-    // 7. 登机前15分钟 - 关键流程
-    const keyProcessTime = new Date(boarding.getTime() - 15 * 60 * 1000)
-    items.push({
-      id: 7,
-      title: '关键流程复核',
-      description: '"八个一做了吗？"、"三复核做了吗？"、"一刻登机系统流程操作了吗？"',
-      time: keyProcessTime,
-      timeLabel: `登机前15分钟 (${formatTime(keyProcessTime)})`,
-      type: 'key-process',
-      icon: 'ClipboardCheck',
-      confirmed: false
-    })
-
-    // 按时间排序
-    items.sort((a, b) => a.time.getTime() - b.time.getTime())
-    return items
-  }
-
   // 格式化时间
   const formatTime = (date: Date): string => {
     const hours = String(date.getHours()).padStart(2, '0')
@@ -307,6 +277,7 @@ export default function Timeline() {
       case 'ClipboardCheck': return <ClipboardCheck size={20} color="#4b5563" />
       case 'Settings': return <Settings size={20} color="#4b5563" />
       case 'FileText': return <FileText size={20} color="#4b5563" />
+      case 'Clock': return <Clock size={20} color="#4b5563" />
       default: return <Circle size={20} color="#4b5563" />
     }
   }
@@ -558,7 +529,7 @@ export default function Timeline() {
                     <Button 
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                       onClick={(e) => {
-                        e.stopPropagation()
+                        e.stopPropagation?.()
                         handleConfirm(item)
                       }}
                       disabled={loading}

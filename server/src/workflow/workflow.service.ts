@@ -1,33 +1,29 @@
 import { Injectable } from '@nestjs/common'
 
+export type RemindType = 'boarding' | 'departure'
+
 export interface WorkflowItem {
   id: number
   content: string
   order: number
+  remindMinutes: number  // 提前多少分钟提醒，0表示正点
+  remindType: RemindType  // 基于登机时间还是起飞时间
 }
 
 @Injectable()
 export class WorkflowService {
   private items: WorkflowItem[] = [
-    { id: 1, content: '航前会开好了吗？', order: 1 },
-    { id: 2, content: '登机设备带好了吗？', order: 2 },
-    { id: 3, content: '登机口设备和系统都打开了吗？', order: 3 },
-    { id: 4, content: '门禁打开了吗？栏杆摆放好了吗？', order: 4 },
-    { id: 5, content: '确认轮椅无陪的信息', order: 5 },
-    { id: 6, content: '确认有没有特殊行李机长通知单', order: 6 },
-    { id: 7, content: '有没有登机口变更？贴告示了没有？', order: 7 },
-    { id: 8, content: '航班开始登机注意站位', order: 8 },
-    { id: 9, content: '八个一做了吗？', order: 9 },
-    { id: 10, content: '三复核做了吗？', order: 10 },
-    { id: 11, content: '登机系统按照流程操作了吗？', order: 11 },
-    { id: 12, content: '行李提前20分钟预拉', order: 12 },
-    { id: 13, content: '行李确认拉下要在登机系统里点击拉下', order: 13 },
-    { id: 14, content: '舱单确认了吗？', order: 14 },
-    { id: 15, content: '货舱通知关了吗？', order: 15 },
-    { id: 16, content: '特殊情况和机长交接了吗？', order: 16 }
+    { id: 1, content: '轮椅无陪信息确认', order: 1, remindMinutes: 15, remindType: 'boarding' },
+    { id: 2, content: '行李预拉确认', order: 2, remindMinutes: 20, remindType: 'departure' },
+    { id: 3, content: '行李、舱单、货舱、交接综合确认', order: 3, remindMinutes: 17, remindType: 'departure' },
+    { id: 4, content: '行李拉下操作确认', order: 4, remindMinutes: 16, remindType: 'departure' },
+    { id: 5, content: '舱单和货舱确认', order: 5, remindMinutes: 15, remindType: 'departure' },
+    { id: 6, content: '登机口设备、系统、门禁及栏杆等现场准备', order: 6, remindMinutes: 0, remindType: 'boarding' },
+    { id: 7, content: '特殊行李预告单和登机口变更告示确认', order: 7, remindMinutes: 0, remindType: 'boarding' },
+    { id: 8, content: '八个一、三复核、登机系统流程复核', order: 8, remindMinutes: 15, remindType: 'boarding' }
   ]
 
-  private nextId = 17
+  private nextId = 9
 
   findAll(): WorkflowItem[] {
     return this.items.sort((a, b) => a.order - b.order)
@@ -37,18 +33,20 @@ export class WorkflowService {
     return this.items.find(item => item.id === id)
   }
 
-  create(data: { content: string; order?: number }): WorkflowItem {
+  create(data: { content: string; order?: number; remindMinutes?: number; remindType?: RemindType }): WorkflowItem {
     const order = data.order ?? this.items.length + 1
     const newItem: WorkflowItem = {
       id: this.nextId++,
       content: data.content,
-      order
+      order,
+      remindMinutes: data.remindMinutes ?? 15,
+      remindType: data.remindType ?? 'departure'
     }
     this.items.push(newItem)
     return newItem
   }
 
-  update(id: number, data: Partial<{ content: string; order: number }>): WorkflowItem | null {
+  update(id: number, data: Partial<{ content: string; order: number; remindMinutes: number; remindType: RemindType }>): WorkflowItem | null {
     const index = this.items.findIndex(item => item.id === id)
     if (index === -1) return null
     
@@ -57,6 +55,12 @@ export class WorkflowService {
     }
     if (data.order !== undefined) {
       this.items[index].order = data.order
+    }
+    if (data.remindMinutes !== undefined) {
+      this.items[index].remindMinutes = data.remindMinutes
+    }
+    if (data.remindType !== undefined) {
+      this.items[index].remindType = data.remindType
     }
     return this.items[index]
   }

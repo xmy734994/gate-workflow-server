@@ -5,14 +5,19 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
-import { Plus, Pencil, Trash2, Save, ArrowLeft } from 'lucide-react-taro'
+import { Plus, Pencil, Trash2, Save, ArrowLeft, Clock } from 'lucide-react-taro'
 import Taro from '@tarojs/taro'
 import { Network } from '@/network'
+
+// 提醒类型：基于登机时间还是起飞时间
+type RemindType = 'boarding' | 'departure'
 
 interface WorkflowItem {
   id: number
   content: string
   order: number
+  remindMinutes: number  // 提前多少分钟提醒
+  remindType: RemindType  // 基于什么时间提醒
 }
 
 export default function ManagePage() {
@@ -21,6 +26,8 @@ export default function ManagePage() {
   const [editingItem, setEditingItem] = useState<WorkflowItem | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editContent, setEditContent] = useState('')
+  const [editMinutes, setEditMinutes] = useState(15)
+  const [editRemindType, setEditRemindType] = useState<RemindType>('departure')
   const [isSaving, setIsSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
 
@@ -49,33 +56,37 @@ export default function ManagePage() {
   }
 
   const getDefaultItems = (): WorkflowItem[] => [
-    { id: 1, content: '航前会开好了吗？', order: 1 },
-    { id: 2, content: '登机设备带好了吗？', order: 2 },
-    { id: 3, content: '登机口设备和系统都打开了吗？', order: 3 },
-    { id: 4, content: '门禁打开了吗？栏杆摆放好了吗？', order: 4 },
-    { id: 5, content: '确认轮椅无陪的信息', order: 5 },
-    { id: 6, content: '确认有没有特殊行李机长通知单', order: 6 },
-    { id: 7, content: '有没有登机口变更？贴告示了没有？', order: 7 },
-    { id: 8, content: '航班开始登机注意站位', order: 8 },
-    { id: 9, content: '八个一做了吗？', order: 9 },
-    { id: 10, content: '三复核做了吗？', order: 10 },
-    { id: 11, content: '登机系统按照流程操作了吗？', order: 11 },
-    { id: 12, content: '行李提前20分钟预拉', order: 12 },
-    { id: 13, content: '行李确认拉下要在登机系统里点击拉下', order: 13 },
-    { id: 14, content: '舱单确认了吗？', order: 14 },
-    { id: 15, content: '货舱通知关了吗？', order: 15 },
-    { id: 16, content: '特殊情况和机长交接了吗？', order: 16 }
+    { id: 1, content: '轮椅无陪信息确认', order: 1, remindMinutes: 15, remindType: 'boarding' },
+    { id: 2, content: '行李预拉确认', order: 2, remindMinutes: 20, remindType: 'departure' },
+    { id: 3, content: '行李、舱单、货舱、交接综合确认', order: 3, remindMinutes: 17, remindType: 'departure' },
+    { id: 4, content: '行李拉下操作确认', order: 4, remindMinutes: 16, remindType: 'departure' },
+    { id: 5, content: '舱单和货舱确认', order: 5, remindMinutes: 15, remindType: 'departure' },
+    { id: 6, content: '登机口设备、系统、门禁及栏杆等现场准备', order: 6, remindMinutes: 0, remindType: 'boarding' },
+    { id: 7, content: '特殊行李预告单和登机口变更告示确认', order: 7, remindMinutes: 0, remindType: 'boarding' },
+    { id: 8, content: '八个一、三复核、登机系统流程复核', order: 8, remindMinutes: 15, remindType: 'boarding' }
   ]
+
+  const formatRemindTime = (item: WorkflowItem): string => {
+    if (item.remindMinutes === 0) {
+      return item.remindType === 'boarding' ? '登机时间' : '起飞时间'
+    }
+    const typeText = item.remindType === 'boarding' ? '登机前' : '起飞前'
+    return `${typeText}${item.remindMinutes}分钟`
+  }
 
   const handleEdit = (item: WorkflowItem) => {
     setEditingItem(item)
     setEditContent(item.content)
+    setEditMinutes(item.remindMinutes)
+    setEditRemindType(item.remindType)
     setIsDialogOpen(true)
   }
 
   const handleAdd = () => {
     setEditingItem(null)
     setEditContent('')
+    setEditMinutes(15)
+    setEditRemindType('departure')
     setIsDialogOpen(true)
   }
 
@@ -92,18 +103,24 @@ export default function ManagePage() {
         await Network.request({
           url: `/api/workflow/items/${editingItem.id}`,
           method: 'PUT',
-          data: { content: editContent.trim() }
+          data: { 
+            content: editContent.trim(),
+            remindMinutes: editMinutes,
+            remindType: editRemindType
+          }
         })
         setItems(items.map(item => 
           item.id === editingItem.id 
-            ? { ...item, content: editContent.trim() }
+            ? { ...item, content: editContent.trim(), remindMinutes: editMinutes, remindType: editRemindType }
             : item
         ))
         toast('修改成功', { type: 'success' })
       } else {
         const newItem = {
           content: editContent.trim(),
-          order: items.length + 1
+          order: items.length + 1,
+          remindMinutes: editMinutes,
+          remindType: editRemindType
         }
         const res = await Network.request({
           url: '/api/workflow/items',
@@ -123,12 +140,18 @@ export default function ManagePage() {
       if (editingItem) {
         setItems(items.map(item => 
           item.id === editingItem.id 
-            ? { ...item, content: editContent.trim() }
+            ? { ...item, content: editContent.trim(), remindMinutes: editMinutes, remindType: editRemindType }
             : item
         ))
       } else {
         const newId = Math.max(...items.map(i => i.id), 0) + 1
-        setItems([...items, { id: newId, content: editContent.trim(), order: items.length + 1 }])
+        setItems([...items, { 
+          id: newId, 
+          content: editContent.trim(), 
+          order: items.length + 1,
+          remindMinutes: editMinutes,
+          remindType: editRemindType
+        }])
       }
       toast('保存成功（本地）', { type: 'success' })
       setIsDialogOpen(false)
@@ -214,6 +237,11 @@ export default function ManagePage() {
     setHasChanges(true)
   }
 
+  const adjustMinutes = (delta: number) => {
+    const newValue = Math.max(0, Math.min(60, editMinutes + delta))
+    setEditMinutes(newValue)
+  }
+
   if (loading) {
     return (
       <View className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -233,7 +261,7 @@ export default function ManagePage() {
             </Button>
             <View>
               <Text className="block text-white text-lg font-semibold">内容管理</Text>
-              <Text className="block text-blue-100 text-sm">编辑工作流程提醒内容</Text>
+              <Text className="block text-blue-100 text-sm">编辑提醒内容与时间设置</Text>
             </View>
           </View>
           <Badge className="bg-white text-blue-600">
@@ -279,6 +307,16 @@ export default function ManagePage() {
                 {/* Content */}
                 <View className="flex-1">
                   <Text className="block text-gray-900">{item.content}</Text>
+                  {/* Remind Time Badge */}
+                  <View className="flex items-center gap-2 mt-2">
+                    <Badge 
+                      variant={item.remindType === 'boarding' ? 'default' : 'secondary'}
+                      className={`text-xs ${item.remindType === 'boarding' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}
+                    >
+                      <Clock size={12} color="#4b5563" className="mr-1" />
+                      {formatRemindTime(item)}
+                    </Badge>
+                  </View>
                 </View>
                 
                 {/* Actions */}
@@ -320,17 +358,86 @@ export default function ManagePage() {
             {editingItem ? '编辑提醒内容' : '添加新提醒'}
           </Text>
           
-          <View className="bg-gray-50 rounded-xl p-4 mb-4">
-            <Textarea
-              value={editContent}
-              onInput={(e) => setEditContent(e.detail.value)}
-              placeholder="输入提醒内容..."
-              maxlength={200}
-              className="min-h-24 bg-transparent"
-            />
-            <Text className="block text-xs text-gray-400 text-right mt-1">
-              {editContent.length}/200
-            </Text>
+          {/* Content Input */}
+          <View className="mb-4">
+            <Text className="block text-sm font-medium text-gray-700 mb-2">提醒内容</Text>
+            <View className="bg-gray-50 rounded-xl p-4">
+              <Textarea
+                value={editContent}
+                onInput={(e) => setEditContent(e.detail.value)}
+                placeholder="输入提醒内容..."
+                maxlength={200}
+                className="min-h-24 bg-transparent"
+              />
+              <Text className="block text-xs text-gray-400 text-right mt-1">
+                {editContent.length}/200
+              </Text>
+            </View>
+          </View>
+          
+          {/* Remind Type Selection */}
+          <View className="mb-4">
+            <Text className="block text-sm font-medium text-gray-700 mb-2">基于时间</Text>
+            <View className="flex gap-3">
+              <Button
+                className={`flex-1 ${editRemindType === 'boarding' ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                onClick={() => setEditRemindType('boarding')}
+              >
+                登机时间
+              </Button>
+              <Button
+                className={`flex-1 ${editRemindType === 'departure' ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                onClick={() => setEditRemindType('departure')}
+              >
+                起飞时间
+              </Button>
+            </View>
+          </View>
+          
+          {/* Minutes Input */}
+          <View className="mb-4">
+            <Text className="block text-sm font-medium text-gray-700 mb-2">提前提醒</Text>
+            <View className="bg-gray-50 rounded-xl p-4">
+              <View className="flex items-center justify-center gap-4">
+                <Button
+                  variant="outline"
+                  className="w-12 h-12 rounded-full"
+                  onClick={() => adjustMinutes(-1)}
+                >
+                  <Text className="block text-xl font-bold">-</Text>
+                </Button>
+                <View className="flex items-center gap-2">
+                  <Text className="block text-3xl font-bold text-gray-900">{editMinutes}</Text>
+                  <Text className="block text-gray-500">分钟</Text>
+                </View>
+                <Button
+                  variant="outline"
+                  className="w-12 h-12 rounded-full"
+                  onClick={() => adjustMinutes(1)}
+                >
+                  <Text className="block text-xl font-bold">+</Text>
+                </Button>
+              </View>
+              <Text className="block text-xs text-gray-400 text-center mt-2">
+                {editMinutes === 0 
+                  ? `提醒时间：${editRemindType === 'boarding' ? '登机时间' : '起飞时间'}`
+                  : `提醒时间：${editRemindType === 'boarding' ? '登机前' : '起飞前'}${editMinutes}分钟`
+                }
+              </Text>
+            </View>
+            {/* Quick Select */}
+            <View className="flex gap-2 mt-3 flex-wrap">
+              {[5, 10, 15, 20, 30, 0].map((val) => (
+                <Button
+                  key={val}
+                  variant={editMinutes === val ? 'default' : 'outline'}
+                  className={`px-3 py-1 text-sm ${editMinutes === val ? 'bg-blue-600' : ''}`}
+                  onClick={() => setEditMinutes(val)}
+                >
+                  {val === 0 ? '正点' : `${val}分钟`}
+                </Button>
+              ))}
+            </View>
           </View>
           
           <View className="flex gap-3">
