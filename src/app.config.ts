@@ -1,7 +1,7 @@
 export default defineAppConfig({
   pages: [
     'pages/index/index',
-    'pages/workflow/index',
+    'pages/timeline/index',
     'pages/manage/index',
     'pages/records/index'
   ],
