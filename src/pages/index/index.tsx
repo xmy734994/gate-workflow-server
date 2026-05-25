@@ -1,27 +1,152 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { View, Text, Picker } from '@tarojs/components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import Taro from '@tarojs/taro'
-import { Settings, Plane, Clock, ClipboardList } from 'lucide-react-taro'
+import { Settings, Plane, Clock, ClipboardList, ChevronDown } from 'lucide-react-taro'
+
+// 时间选择器弹窗组件
+interface TimePickerProps {
+  visible: boolean
+  title: string
+  value: string
+  onClose: () => void
+  onConfirm: (value: string) => void
+}
+
+function TimePickerDialog({ visible, title, value, onClose, onConfirm }: TimePickerProps) {
+  const [selectedDate, setSelectedDate] = useState('')
+  const [selectedHour, setSelectedHour] = useState('00')
+  const [selectedMinute, setSelectedMinute] = useState('00')
+
+  useEffect(() => {
+    if (visible) {
+      if (value) {
+        const [date, time] = value.split(' ')
+        const [hour, minute] = time.split(':')
+        setSelectedDate(date)
+        setSelectedHour(hour || '00')
+        setSelectedMinute(minute || '00')
+      } else {
+        const now = new Date()
+        now.setMinutes(now.getMinutes() + 60)
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        setSelectedDate(`${year}-${month}-${day}`)
+        setSelectedHour(String(now.getHours()).padStart(2, '0'))
+        setSelectedMinute(String(now.getMinutes()).padStart(2, '0'))
+      }
+    }
+  }, [visible, value])
+
+  const handleConfirm = () => {
+    const result = `${selectedDate} ${selectedHour}:${selectedMinute}`
+    onConfirm(result)
+    onClose()
+  }
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+
+  // 生成未来7天的日期列表
+  const dates: string[] = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date()
+    d.setDate(d.getDate() + i)
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    dates.push(`${year}-${month}-${day}`)
+  }
+
+  const dateIndex = dates.indexOf(selectedDate)
+
+  return (
+    <Dialog open={visible} onOpenChange={() => onClose()}>
+      <DialogContent>
+        <DialogTitle className="text-lg font-semibold text-gray-900 mb-4">{title}</DialogTitle>
+        <View className="space-y-4">
+          {/* 日期选择 */}
+          <View>
+            <Text className="block text-sm text-gray-600 mb-2">选择日期</Text>
+            <View className="bg-gray-50 rounded-xl p-2">
+              <Picker
+                mode="selector"
+                range={dates}
+                onChange={(e: any) => setSelectedDate(dates[e.detail.value])}
+                value={dateIndex >= 0 ? dateIndex : 0}
+              >
+                <View className="flex items-center justify-between px-3 py-3">
+                  <Text className="text-gray-900">{selectedDate}</Text>
+                  <ChevronDown size={16} color="#6b7280" />
+                </View>
+              </Picker>
+            </View>
+          </View>
+
+          {/* 时间选择 */}
+          <View className="flex gap-3">
+            {/* 小时 */}
+            <View className="flex-1">
+              <Text className="block text-sm text-gray-600 mb-2">小时</Text>
+              <View className="bg-gray-50 rounded-xl p-2">
+                <Picker
+                  mode="selector"
+                  range={hours}
+                  onChange={(e: any) => setSelectedHour(hours[e.detail.value])}
+                  value={parseInt(selectedHour)}
+                >
+                  <View className="flex items-center justify-between px-3 py-3">
+                    <Text className="text-gray-900">{selectedHour} 时</Text>
+                    <ChevronDown size={16} color="#6b7280" />
+                  </View>
+                </Picker>
+              </View>
+            </View>
+
+            {/* 分钟 */}
+            <View className="flex-1">
+              <Text className="block text-sm text-gray-600 mb-2">分钟</Text>
+              <View className="bg-gray-50 rounded-xl p-2">
+                <Picker
+                  mode="selector"
+                  range={minutes}
+                  onChange={(e: any) => setSelectedMinute(minutes[e.detail.value])}
+                  value={parseInt(selectedMinute)}
+                >
+                  <View className="flex items-center justify-between px-3 py-3">
+                    <Text className="text-gray-900">{selectedMinute} 分</Text>
+                    <ChevronDown size={16} color="#6b7280" />
+                  </View>
+                </Picker>
+              </View>
+            </View>
+          </View>
+
+          {/* 按钮 */}
+          <View className="flex gap-3 pt-2">
+            <View className="flex-1">
+              <Button variant="outline" onClick={onClose}>取消</Button>
+            </View>
+            <View className="flex-1">
+              <Button onClick={handleConfirm}>确认</Button>
+            </View>
+          </View>
+        </View>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export default function Index() {
   const [flightNumber, setFlightNumber] = useState('')
   const [departureTime, setDepartureTime] = useState('')
   const [boardingTime, setBoardingTime] = useState('')
-
-  // 获取当前时间用于默认值
-  const getDefaultDateTime = (addMinutes: number = 60) => {
-    const date = new Date()
-    date.setMinutes(date.getMinutes() + addMinutes)
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-    return `${year}-${month}-${day} ${hours}:${minutes}`
-  }
+  const [showDeparturePicker, setShowDeparturePicker] = useState(false)
+  const [showBoardingPicker, setShowBoardingPicker] = useState(false)
 
   const handleStartPlan = () => {
     if (!flightNumber.trim()) {
@@ -66,18 +191,12 @@ export default function Index() {
     Taro.navigateTo({ url: '/pages/records/index' })
   }
 
-  // 处理时间选择
-  const handleDepartureTimeChange = (e: any) => {
-    const selected = e.detail.value
-    // 格式: YYYY-MM-DDTHH:mm
-    const formatted = selected.replace('T', ' ')
-    setDepartureTime(formatted)
+  const handleDepartureConfirm = (value: string) => {
+    setDepartureTime(value)
   }
 
-  const handleBoardingTimeChange = (e: any) => {
-    const selected = e.detail.value
-    const formatted = selected.replace('T', ' ')
-    setBoardingTime(formatted)
+  const handleBoardingConfirm = (value: string) => {
+    setBoardingTime(value)
   }
 
   return (
@@ -117,25 +236,15 @@ export default function Index() {
             <Text className="block text-base font-medium text-gray-700 mb-2">
               计划起飞时间
             </Text>
-            <View className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
-              <View className="flex items-center">
-                <Text className="block text-gray-400 mr-3">选择时间</Text>
-                <View className="flex-1">
-                  <Picker
-                    // @ts-ignore
-                    mode="datetime"
-                    onChange={handleDepartureTimeChange}
-                    value={departureTime ? departureTime.replace(' ', 'T') : ''}
-                    start={getDefaultDateTime(-30)}
-                    end={getDefaultDateTime(720)}
-                  >
-                    <View className="py-1">
-                      <Text className={departureTime ? 'text-gray-900' : 'text-gray-400'}>
-                        {departureTime || '请选择起飞时间'}
-                      </Text>
-                    </View>
-                  </Picker>
-                </View>
+            <View 
+              className="bg-gray-50 rounded-xl px-4 py-4 mb-4"
+              onClick={() => setShowDeparturePicker(true)}
+            >
+              <View className="flex items-center justify-between">
+                <Text className={departureTime ? 'text-gray-900 text-base' : 'text-gray-400 text-base'}>
+                  {departureTime || '请选择起飞时间'}
+                </Text>
+                <ChevronDown size={20} color="#9ca3af" />
               </View>
             </View>
 
@@ -143,88 +252,105 @@ export default function Index() {
             <Text className="block text-base font-medium text-gray-700 mb-2">
               计划登机时间
             </Text>
-            <View className="bg-gray-50 rounded-xl px-4 py-3 mb-6">
-              <View className="flex items-center">
-                <Text className="block text-gray-400 mr-3">选择时间</Text>
-                <View className="flex-1">
-                  <Picker
-                    // @ts-ignore
-                    mode="datetime"
-                    onChange={handleBoardingTimeChange}
-                    value={boardingTime ? boardingTime.replace(' ', 'T') : ''}
-                    start={getDefaultDateTime(-30)}
-                    end={departureTime ? departureTime.replace(' ', 'T') : getDefaultDateTime(720)}
-                  >
-                    <View className="py-1">
-                      <Text className={boardingTime ? 'text-gray-900' : 'text-gray-400'}>
-                        {boardingTime || '请选择登机时间'}
-                      </Text>
-                    </View>
-                  </Picker>
-                </View>
+            <View 
+              className="bg-gray-50 rounded-xl px-4 py-4 mb-6"
+              onClick={() => setShowBoardingPicker(true)}
+            >
+              <View className="flex items-center justify-between">
+                <Text className={boardingTime ? 'text-gray-900 text-base' : 'text-gray-400 text-base'}>
+                  {boardingTime || '请选择登机时间'}
+                </Text>
+                <ChevronDown size={20} color="#9ca3af" />
               </View>
             </View>
 
+            {/* 开始按钮 */}
             <Button 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold rounded-xl"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg py-4"
               onClick={handleStartPlan}
             >
-              <Plane size={24} color="#ffffff" className="mr-2" />
-              <Text className="block">开始提醒</Text>
+              <Plane size={20} color="#ffffff" className="mr-2" />
+              <Text>开始提醒</Text>
             </Button>
           </CardContent>
         </Card>
 
         {/* 提醒说明 */}
-        <View className="mt-6">
-          <Text className="block text-sm font-medium text-gray-700 mb-3">
-            提醒时间节点：
-          </Text>
-          <View className="bg-white rounded-xl p-4 shadow-sm">
-            <View className="space-y-3">
-              {[
-                { time: '登机前15分钟', task: '确认轮椅无陪信息' },
-                { time: '起飞前20分钟', task: '确认行李预拉' },
-                { time: '起飞前17分钟', task: '舱单确认、货舱通知、交接' },
-                { time: '起飞前16分钟', task: '完成行李拉下操作' },
-                { time: '起飞前15分钟', task: '舱单和货舱确认' },
-                { time: '登机时间', task: '现场准备确认' },
-                { time: '登机前15分钟', task: '关键流程复核' }
-              ].map((item, index) => (
-                <View key={index} className="flex items-start gap-3">
-                  <View className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-2" />
-                  <View className="flex-1">
-                    <Text className="block text-sm text-gray-600">{item.time}</Text>
-                    <Text className="block text-sm text-gray-900">{item.task}</Text>
-                  </View>
-                </View>
-              ))}
+        <Card className="mt-4 shadow-sm">
+          <CardContent className="p-4">
+            <Text className="block text-sm font-medium text-gray-700 mb-3">
+              提醒时间节点
+            </Text>
+            <View className="space-y-2">
+              <View className="flex items-start">
+                <View className="w-2 h-2 rounded-full bg-blue-500 mt-2 mr-2 flex-shrink-0" />
+                <Text className="block text-sm text-gray-600">登机前15分钟：轮椅无陪信息确认</Text>
+              </View>
+              <View className="flex items-start">
+                <View className="w-2 h-2 rounded-full bg-blue-500 mt-2 mr-2 flex-shrink-0" />
+                <Text className="block text-sm text-gray-600">起飞前20分钟：行李预拉确认</Text>
+              </View>
+              <View className="flex items-start">
+                <View className="w-2 h-2 rounded-full bg-blue-500 mt-2 mr-2 flex-shrink-0" />
+                <Text className="block text-sm text-gray-600">起飞前17分钟：行李、舱单、货舱、交接确认</Text>
+              </View>
+              <View className="flex items-start">
+                <View className="w-2 h-2 rounded-full bg-blue-500 mt-2 mr-2 flex-shrink-0" />
+                <Text className="block text-sm text-gray-600">起飞前16分钟：行李拉下操作</Text>
+              </View>
+              <View className="flex items-start">
+                <View className="w-2 h-2 rounded-full bg-blue-500 mt-2 mr-2 flex-shrink-0" />
+                <Text className="block text-sm text-gray-600">起飞前15分钟：舱单和货舱确认</Text>
+              </View>
+              <View className="flex items-start">
+                <View className="w-2 h-2 rounded-full bg-green-500 mt-2 mr-2 flex-shrink-0" />
+                <Text className="block text-sm text-gray-600">登机时间：现场准备确认</Text>
+              </View>
+              <View className="flex items-start">
+                <View className="w-2 h-2 rounded-full bg-orange-500 mt-2 mr-2 flex-shrink-0" />
+                <Text className="block text-sm text-gray-600">登机前15分钟：关键流程复核</Text>
+              </View>
             </View>
-          </View>
-        </View>
+          </CardContent>
+        </Card>
       </View>
 
-      {/* Footer */}
-      <View className="px-4 py-4 border-t border-gray-200 bg-white">
-        <View className="flex gap-3">
-          <Button
-            variant="ghost"
-            className="flex-1 text-gray-600 hover:text-gray-900"
-            onClick={handleGoToManage}
-          >
-            <Settings size={18} color="#4b5563" className="mr-2" />
-            <Text className="block">内容管理</Text>
-          </Button>
-          <Button
-            variant="ghost"
-            className="flex-1 text-gray-600 hover:text-gray-900"
-            onClick={handleGoToRecords}
-          >
-            <ClipboardList size={18} color="#4b5563" className="mr-2" />
-            <Text className="block">操作记录</Text>
-          </Button>
-        </View>
+      {/* 底部导航 */}
+      <View className="bg-white border-t border-gray-200 px-4 py-3 flex gap-4">
+        <Button 
+          variant="outline" 
+          className="flex-1"
+          onClick={handleGoToRecords}
+        >
+          <ClipboardList size={18} color="#1890ff" className="mr-2" />
+          <Text>操作记录</Text>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="flex-1"
+          onClick={handleGoToManage}
+        >
+          <Settings size={18} color="#1890ff" className="mr-2" />
+          <Text>内容管理</Text>
+        </Button>
       </View>
+
+      {/* 时间选择弹窗 */}
+      <TimePickerDialog
+        visible={showDeparturePicker}
+        title="选择起飞时间"
+        value={departureTime}
+        onClose={() => setShowDeparturePicker(false)}
+        onConfirm={handleDepartureConfirm}
+      />
+      
+      <TimePickerDialog
+        visible={showBoardingPicker}
+        title="选择登机时间"
+        value={boardingTime}
+        onClose={() => setShowBoardingPicker(false)}
+        onConfirm={handleBoardingConfirm}
+      />
     </View>
   )
 }
