@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import Taro from '@tarojs/taro'
-import { Settings, Plane, Clock, ClipboardList, ChevronDown } from 'lucide-react-taro'
+import { Settings, Plane, Clock, ClipboardList, ChevronDown, Bell } from 'lucide-react-taro'
 
 // 时间选择器弹窗组件
 interface TimePickerProps {
@@ -187,6 +187,10 @@ export default function Index() {
     Taro.navigateTo({ url: '/pages/manage/index' })
   }
 
+  const handleGoToSubscribe = () => {
+    Taro.navigateTo({ url: '/pages/subscribe/index' })
+  }
+
   const handleGoToRecords = () => {
     Taro.navigateTo({ url: '/pages/records/index' })
   }
@@ -332,6 +336,14 @@ export default function Index() {
         >
           <Settings size={18} color="#1890ff" className="mr-2" />
           <Text>内容管理</Text>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="flex-1"
+          onClick={handleGoToSubscribe}
+        >
+          <Bell size={18} color="#1890ff" className="mr-2" />
+          <Text>通知订阅</Text>
         </Button>
       </View>
 

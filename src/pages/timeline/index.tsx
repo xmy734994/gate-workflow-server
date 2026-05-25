@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { View, Text } from '@tarojs/components'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
 import { 
@@ -44,6 +45,10 @@ export default function Timeline() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [loading, setLoading] = useState(false)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [showAlert, setShowAlert] = useState(false)
+  const [alertItem, setAlertItem] = useState<TimelineItem | null>(null)
+  const notifiedItems = useRef<Set<number>>(new Set())
+  const isMiniApp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP || Taro.getEnv() === Taro.ENV_TYPE.TT
 
   // 初始化数据
   useEffect(() => {
@@ -95,6 +100,89 @@ export default function Timeline() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  // 检查并触发提醒
+  const checkReminders = useCallback(async () => {
+    if (timeline.length === 0) return
+
+    for (const item of timeline) {
+      if (item.confirmed || notifiedItems.current.has(item.id)) continue
+
+      const diff = item.time.getTime() - currentTime.getTime()
+      const threeMinutes = 3 * 60 * 1000
+
+      // 提醒时机：时间到达前3分钟到时间点后1分钟
+      if (diff <= threeMinutes && diff >= -1 * 60 * 1000) {
+        notifiedItems.current.add(item.id)
+        setAlertItem(item)
+        setShowAlert(true)
+
+        // 触发订阅消息（仅小程序端）
+        if (isMiniApp && flightPlan) {
+          try {
+            // 获取用户订阅状态
+            const subscriptions = Taro.getStorageSync('user_subscriptions') || {}
+            if (subscriptions[item.type]) {
+              // 调用订阅消息 API
+              await triggerSubscribeMessage(item, flightPlan)
+            }
+          } catch (err) {
+            console.error('触发订阅消息失败', err)
+          }
+        }
+
+        // 播放提示音（小程序端）
+        if (isMiniApp) {
+          try {
+            const innerAudioContext = Taro.createInnerAudioContext()
+            innerAudioContext.src = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'
+            innerAudioContext.play()
+          } catch (err) {
+            console.error('播放提示音失败', err)
+          }
+        }
+
+        break // 一次只弹一个提醒
+      }
+    }
+  }, [timeline, currentTime, flightPlan, isMiniApp])
+
+  // 触发订阅消息
+  const triggerSubscribeMessage = async (item: TimelineItem, plan: FlightPlan) => {
+    try {
+      // 微信订阅消息模板
+      if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
+        ;(Taro as any).requestSubscribeMessage({
+          tmplIds: ['BOARDING_REMINDER'], // 需要在微信后台配置模板
+          success: (res: any) => {
+            if (res['BOARDING_REMINDER'] === 'accept') {
+              // 可以发送订阅消息给用户
+              console.log('用户同意了订阅')
+            }
+          }
+        })
+      }
+      
+      // 同时记录到后端，用于后台发送消息
+      await Network.request({
+        url: '/api/records',
+        method: 'POST',
+        data: {
+          flightNumber: plan.flightNumber,
+          action: 'reminder_sent',
+          detail: `发送提醒: ${item.title}`,
+          planTime: item.time.toISOString()
+        }
+      })
+    } catch (err) {
+      console.error('订阅消息API调用失败', err)
+    }
+  }
+
+  // 每秒检查提醒
+  useEffect(() => {
+    checkReminders()
+  }, [checkReminders])
 
   // 生成时间线
   const generateTimeline = (boarding: Date, departure: Date): TimelineItem[] => {
@@ -521,6 +609,54 @@ export default function Timeline() {
           <Text className="block">完成所有流程</Text>
         </Button>
       </View>
+
+      {/* 提醒弹窗 */}
+      <Dialog open={showAlert} onOpenChange={setShowAlert}>
+        <DialogContent className="bg-white">
+          <View className="text-center py-4">
+            <View className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+              <Bell size={32} color="#f59e0b" />
+            </View>
+            <DialogTitle className="text-lg font-semibold text-gray-900 mb-2">
+              <Text className="block">提醒：该确认了</Text>
+            </DialogTitle>
+            {alertItem && (
+              <DialogDescription className="text-center">
+                <Text className="block text-base font-medium text-gray-800 mb-1">
+                  {alertItem.title}
+                </Text>
+                <Text className="block text-sm text-gray-500 mb-1">
+                  {alertItem.timeLabel}
+                </Text>
+                <Text className="block text-xs text-gray-400 mt-2">
+                  {alertItem.description}
+                </Text>
+              </DialogDescription>
+            )}
+          </View>
+          <View className="flex gap-3 mt-4">
+            <Button 
+              variant="outline" 
+              className="flex-1"
+              onClick={() => setShowAlert(false)}
+            >
+              <Text>稍后</Text>
+            </Button>
+            <Button 
+              className="flex-1 bg-blue-600"
+              onClick={() => {
+                setShowAlert(false)
+                if (alertItem) {
+                  handleConfirm(alertItem)
+                }
+              }}
+            >
+              <CircleCheck size={18} color="#ffffff" className="mr-2" />
+              <Text>立即确认</Text>
+            </Button>
+          </View>
+        </DialogContent>
+      </Dialog>
     </View>
   )
 }

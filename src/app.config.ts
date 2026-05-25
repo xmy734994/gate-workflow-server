@@ -3,7 +3,8 @@ export default defineAppConfig({
     'pages/index/index',
     'pages/timeline/index',
     'pages/manage/index',
-    'pages/records/index'
+    'pages/records/index',
+    'pages/subscribe/index'
   ],
   window: {
     backgroundTextStyle: 'light',
