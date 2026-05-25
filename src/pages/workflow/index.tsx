@@ -25,10 +25,29 @@ export default function WorkflowPage() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     if (params?.flightNumber) {
-      setFlightNumber(decodeURIComponent(params.flightNumber))
+      const flight = decodeURIComponent(params.flightNumber)
+      setFlightNumber(flight)
+      // 记录开始操作
+      recordAction('start', `开始航班 ${flight} 的工作流程`)
     }
     fetchWorkflowItems()
   }, [])
+
+  const recordAction = async (action: string, detail: string) => {
+    try {
+      await Network.request({
+        url: '/api/records',
+        method: 'POST',
+        data: {
+          flightNumber,
+          action,
+          detail
+        }
+      })
+    } catch (error) {
+      console.error('记录操作失败:', error)
+    }
+  }
 
   const fetchWorkflowItems = async () => {
     try {
@@ -44,7 +63,6 @@ export default function WorkflowPage() {
       }
     } catch (error) {
       console.error('获取工作流程失败:', error)
-      // 使用默认数据
       setItems(getDefaultItems())
     } finally {
       setLoading(false)
@@ -75,10 +93,14 @@ export default function WorkflowPage() {
       const currentItem = items[currentIndex]
       setCompletedItems([...completedItems, currentItem.id])
       
+      // 记录确认操作
+      recordAction('confirm', `确认: ${currentItem.content}`)
+      
       if (currentIndex < items.length - 1) {
         setCurrentIndex(currentIndex + 1)
       } else {
-        // All items completed
+        // 全部完成
+        recordAction('complete', `航班 ${flightNumber} 所有流程已完成`)
         Taro.showToast({
           title: '所有流程已完成！',
           icon: 'success',
@@ -94,6 +116,7 @@ export default function WorkflowPage() {
       content: '确定要重新开始工作流程吗？',
       success: (res) => {
         if (res.confirm) {
+          recordAction('reset', '重置工作流程')
           setCurrentIndex(0)
           setCompletedItems([])
           setShowCompleted(false)

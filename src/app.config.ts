@@ -2,7 +2,8 @@ export default defineAppConfig({
   pages: [
     'pages/index/index',
     'pages/workflow/index',
-    'pages/manage/index'
+    'pages/manage/index',
+    'pages/records/index'
   ],
   window: {
     backgroundTextStyle: 'light',

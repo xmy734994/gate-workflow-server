@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import Taro from '@tarojs/taro'
-import { Settings, Plane } from 'lucide-react-taro'
+import { Settings, Plane, ClipboardList } from 'lucide-react-taro'
 
 export default function Index() {
   const [flightNumber, setFlightNumber] = useState('')
@@ -22,6 +22,10 @@ export default function Index() {
 
   const handleGoToManage = () => {
     Taro.navigateTo({ url: '/pages/manage/index' })
+  }
+
+  const handleGoToRecords = () => {
+    Taro.navigateTo({ url: '/pages/records/index' })
   }
 
   return (
@@ -98,14 +102,24 @@ export default function Index() {
 
       {/* Footer */}
       <View className="px-4 py-4 border-t border-gray-200 bg-white">
-        <Button
-          variant="ghost"
-          className="w-full text-gray-600 hover:text-gray-900"
-          onClick={handleGoToManage}
-        >
-          <Settings size={18} color="#4b5563" className="mr-2" />
-          <Text className="block">内容管理</Text>
-        </Button>
+        <View className="flex gap-3">
+          <Button
+            variant="ghost"
+            className="flex-1 text-gray-600 hover:text-gray-900"
+            onClick={handleGoToManage}
+          >
+            <Settings size={18} color="#4b5563" className="mr-2" />
+            <Text className="block">内容管理</Text>
+          </Button>
+          <Button
+            variant="ghost"
+            className="flex-1 text-gray-600 hover:text-gray-900"
+            onClick={handleGoToRecords}
+          >
+            <ClipboardList size={18} color="#4b5563" className="mr-2" />
+            <Text className="block">操作记录</Text>
+          </Button>
+        </View>
       </View>
     </View>
   )
