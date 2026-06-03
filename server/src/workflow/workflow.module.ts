@@ -9,4 +9,8 @@ import { WorkflowService } from './workflow.service'
   providers: [WorkflowService],
   exports: [WorkflowService]
 })
-export class WorkflowModule {}
+export class WorkflowModule {
+  constructor(private workflowService: WorkflowService) {
+    // WorkflowService 会自动初始化定时任务
+  }
+}

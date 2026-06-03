@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import Taro from '@tarojs/taro'
 import { Bell, Smartphone, CircleCheck, CircleAlert } from 'lucide-react-taro'
+import { Network } from '@/network'
 
 // 订阅提醒项配置
 const SUBSCRIPTION_ITEMS = [
@@ -76,6 +77,47 @@ export default function SubscribePage() {
     setSaved(false)
   }
 
+  // 获取用户 OpenID
+  const getOpenId = async (): Promise<string | null> => {
+    // 只在小程序环境获取 OpenID
+    if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+      return null
+    }
+
+    try {
+      // 先检查本地缓存
+      let openid = Taro.getStorageSync('openid')
+      if (openid) {
+        return openid
+      }
+
+      // 调用 wx.login 获取 code
+      const loginResult = await Taro.login()
+      if (!loginResult.code) {
+        console.log('[Subscribe] wx.login 失败')
+        return null
+      }
+
+      // 将 code 发送到后端换取 openid
+      const response = await Network.request({
+        url: '/api/wechat/login',
+        method: 'POST',
+        data: { code: loginResult.code }
+      })
+
+      if (response.data?.code === 200 && response.data?.data?.openid) {
+        openid = response.data.data.openid
+        Taro.setStorageSync('openid', openid)
+        return openid
+      }
+      
+      return null
+    } catch (error) {
+      console.error('[Subscribe] 获取 OpenID 异常:', error)
+      return null
+    }
+  }
+
   const handleRequestSubscription = async (item: typeof SUBSCRIPTION_ITEMS[0]) => {
     if (!isMiniApp) {
       Taro.showToast({ title: '仅支持微信/抖音小程序', icon: 'none' })
@@ -110,6 +152,21 @@ export default function SubscribePage() {
       if (result) {
         setSubscriptions(prev => ({ ...prev, [item.id]: true }))
         Taro.showToast({ title: '订阅成功', icon: 'success' })
+        
+        // 将订阅状态发送到后端
+        const openid = await getOpenId()
+        if (openid) {
+          try {
+            await Network.request({
+              url: '/api/wechat/subscribe',
+              method: 'POST',
+              data: { openid, templateId: item.templateId }
+            })
+            console.log('[Subscribe] 订阅状态已同步到后端')
+          } catch (err) {
+            console.error('[Subscribe] 同步订阅状态失败:', err)
+          }
+        }
       } else {
         setSubscriptions(prev => ({ ...prev, [item.id]: false }))
         Taro.showToast({ title: '您已拒绝订阅', icon: 'none' })

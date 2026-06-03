@@ -149,6 +149,46 @@ export default function Index() {
   const [showDeparturePicker, setShowDeparturePicker] = useState(false)
   const [showBoardingPicker, setShowBoardingPicker] = useState(false)
 
+  // 获取用户 OpenID
+  const getOpenId = async (): Promise<string | null> => {
+    // 只在小程序环境获取 OpenID
+    if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+      console.log('[Index] 非小程序环境，跳过获取 OpenID')
+      return null
+    }
+
+    try {
+      // 1. 调用 wx.login 获取 code
+      const loginResult = await Taro.login()
+      if (!loginResult.code) {
+        console.log('[Index] wx.login 失败')
+        return null
+      }
+
+      // 2. 将 code 发送到后端换取 openid
+      const response = await Network.request({
+        url: '/api/wechat/login',
+        method: 'POST',
+        data: { code: loginResult.code }
+      })
+
+      if (response.data?.code === 200 && response.data?.data?.openid) {
+        const openid = response.data.data.openid
+        console.log('[Index] 获取 OpenID 成功:', openid)
+        
+        // 保存到本地存储
+        Taro.setStorageSync('openid', openid)
+        return openid
+      }
+      
+      console.log('[Index] 获取 OpenID 失败:', response.data?.msg)
+      return null
+    } catch (error) {
+      console.error('[Index] 获取 OpenID 异常:', error)
+      return null
+    }
+  }
+
   const handleStartPlan = async () => {
     if (!flightNumber.trim()) {
       Taro.showToast({ title: '请输入航班号', icon: 'none' })
@@ -173,13 +213,20 @@ export default function Index() {
     }
 
     const formattedFlight = flightNumber.trim().toUpperCase()
+
+    // 获取 OpenID（仅小程序环境）
+    let openid = Taro.getStorageSync('openid')
+    if (!openid && Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
+      openid = await getOpenId()
+    }
+
     const planData = {
       flightNumber: formattedFlight,
       departureTime,
       boardingTime
     }
 
-    // 向后端注册航班计划，设置定时提醒
+    // 向后端注册航班计划，设置定时提醒（包含 openid）
     try {
       Taro.showLoading({ title: '正在设置提醒...' })
       await Network.request({
@@ -188,7 +235,8 @@ export default function Index() {
         data: {
           flightNumber: formattedFlight,
           departureTime: departure.getTime(),
-          boardingTime: boarding.getTime()
+          boardingTime: boarding.getTime(),
+          openid: openid || undefined
         }
       })
       Taro.hideLoading()

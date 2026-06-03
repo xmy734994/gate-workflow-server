@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
+import { WechatService } from '@/wechat/wechat.service'
 
 export type RemindType = 'boarding' | 'departure'
 
@@ -16,6 +17,7 @@ export interface FlightPlan {
   flightNumber: string
   departureTime: number  // timestamp
   boardingTime: number   // timestamp
+  openid?: string        // 用户的 openid，用于发送订阅消息
   reminders: ReminderTask[]
   createdAt: number
 }
@@ -27,6 +29,7 @@ export interface ReminderTask {
   remindType: RemindType
   sent: boolean        // 是否已发送
   flightNumber: string
+  openid?: string      // 用户的 openid
 }
 
 @Injectable()
@@ -44,19 +47,55 @@ export class WorkflowService implements OnModuleInit {
 
   private flightPlans: Map<string, FlightPlan> = new Map()
   private pendingReminders: ReminderTask[] = []
-  
-  // 回调函数，用于发送订阅消息
-  private sendNotificationCallback: ((task: ReminderTask) => Promise<void>) | null = null
-
   private nextId = 9
+
+  // 注入 WechatService
+  constructor(private wechatService: WechatService) {}
 
   onModuleInit() {
     console.log('[WorkflowService] 服务已初始化，定时检查器已启动')
+    
+    // 设置发送微信订阅消息的回调
+    this.setupWechatNotification()
   }
 
-  // 设置发送通知的回调
-  setNotificationCallback(callback: (task: ReminderTask) => Promise<void>) {
-    this.sendNotificationCallback = callback
+  // 设置微信订阅消息发送
+  private setupWechatNotification() {
+    // 立即设置回调
+    this.sendWechatNotification = async (task: ReminderTask) => {
+      if (!task.openid) {
+        console.log(`[WorkflowService] 任务 ${task.flightNumber} 没有 openid，跳过微信通知`)
+        return
+      }
+
+      const templateId = this.wechatService.getTemplateId()
+      if (!templateId) {
+        console.log(`[WorkflowService] 未配置模板 ID，跳过微信通知`)
+        return
+      }
+
+      // 检查用户是否订阅
+      if (!this.wechatService.isUserSubscribed(task.openid, templateId)) {
+        console.log(`[WorkflowService] 用户 ${task.openid} 未订阅模板 ${templateId}`)
+        return
+      }
+
+      // 构建消息数据
+      const timeStr = new Date(task.remindTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      const data = {
+        thing1: { value: task.flightNumber },                    // 航班号
+        thing2: { value: task.workflowContent },                  // 提醒内容
+        time3: { value: timeStr },                               // 提醒时间
+        phrase4: { value: task.remindType === 'departure' ? '起飞前' : '登机前' }, // 提醒类型
+      }
+
+      const result = await this.wechatService.sendSubscribeMessage(task.openid, templateId, data)
+      if (result.success) {
+        console.log(`[WorkflowService] 微信通知发送成功: ${task.flightNumber} - ${task.workflowContent}`)
+      } else {
+        console.log(`[WorkflowService] 微信通知发送失败: ${result.message}`)
+      }
+    }
   }
 
   findAll(): WorkflowItem[] {
@@ -123,7 +162,7 @@ export class WorkflowService implements OnModuleInit {
   }
 
   // 创建航班计划并生成提醒任务
-  createFlightPlan(data: { flightNumber: string; departureTime: number; boardingTime: number }): FlightPlan {
+  createFlightPlan(data: { flightNumber: string; departureTime: number; boardingTime: number; openid?: string }): FlightPlan {
     const planId = `${data.flightNumber}_${Date.now()}`
     const reminders: ReminderTask[] = []
     
@@ -139,7 +178,8 @@ export class WorkflowService implements OnModuleInit {
         remindTime,
         remindType: item.remindType,
         sent: false,
-        flightNumber: data.flightNumber
+        flightNumber: data.flightNumber,
+        openid: data.openid // 传递 openid
       })
     })
     
@@ -148,6 +188,7 @@ export class WorkflowService implements OnModuleInit {
       flightNumber: data.flightNumber,
       departureTime: data.departureTime,
       boardingTime: data.boardingTime,
+      openid: data.openid,
       reminders,
       createdAt: Date.now()
     }
@@ -168,7 +209,7 @@ export class WorkflowService implements OnModuleInit {
         }
       })
     
-    console.log(`[WorkflowService] 创建航班计划: ${data.flightNumber}, 生成 ${reminders.length} 个提醒任务`)
+    console.log(`[WorkflowService] 创建航班计划: ${data.flightNumber}, 生成 ${reminders.length} 个提醒任务, openid: ${data.openid || '未提供'}`)
     return plan
   }
 
@@ -236,20 +277,54 @@ export class WorkflowService implements OnModuleInit {
     for (const task of toSend) {
       console.log(`[WorkflowService] 发送提醒: ${task.flightNumber} - ${task.workflowContent}`)
       
-      if (this.sendNotificationCallback) {
-        try {
-          await this.sendNotificationCallback(task)
-          this.markReminderSent(task.flightNumber, task.workflowItemId, task.remindTime)
-        } catch (error) {
-          console.error(`[WorkflowService] 发送提醒失败:`, error)
-          // 失败后重新加入队列，稍后重试
-          this.pendingReminders.push(task)
-        }
+      try {
+        await this.sendWechatNotification(task)
+        this.markReminderSent(task.flightNumber, task.workflowItemId, task.remindTime)
+      } catch (error) {
+        console.error(`[WorkflowService] 发送提醒失败:`, error)
+        // 失败后重新加入队列，稍后重试
+        this.pendingReminders.push(task)
       }
     }
     
     if (toSend.length > 0) {
       console.log(`[WorkflowService] 本分钟已发送 ${toSend.length} 个提醒`)
+    }
+  }
+
+  // 发送微信订阅消息
+  private sendWechatNotification: (task: ReminderTask) => Promise<void> = async (task: ReminderTask) => {
+    if (!task.openid) {
+      console.log(`[WorkflowService] 任务 ${task.flightNumber} 没有 openid，跳过微信通知`)
+      return
+    }
+
+    const templateId = this.wechatService.getTemplateId()
+    if (!templateId) {
+      console.log(`[WorkflowService] 未配置模板 ID，跳过微信通知`)
+      return
+    }
+
+    // 检查用户是否订阅
+    if (!this.wechatService.isUserSubscribed(task.openid, templateId)) {
+      console.log(`[WorkflowService] 用户 ${task.openid} 未订阅模板 ${templateId}`)
+      return
+    }
+
+    // 构建消息数据
+    const timeStr = new Date(task.remindTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    const data = {
+      thing1: { value: task.flightNumber },                    // 航班号
+      thing2: { value: task.workflowContent },                  // 提醒内容
+      time3: { value: timeStr },                               // 提醒时间
+      phrase4: { value: task.remindType === 'departure' ? '起飞前' : '登机前' }, // 提醒类型
+    }
+
+    const result = await this.wechatService.sendSubscribeMessage(task.openid, templateId, data)
+    if (result.success) {
+      console.log(`[WorkflowService] 微信通知发送成功: ${task.flightNumber} - ${task.workflowContent}`)
+    } else {
+      console.log(`[WorkflowService] 微信通知发送失败: ${result.message}`)
     }
   }
 }
