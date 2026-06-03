@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import Taro from '@tarojs/taro'
 import { Settings, Plane, Clock, ClipboardList, ChevronDown, Bell } from 'lucide-react-taro'
+import { Network } from '@/network'
 
 // 时间选择器弹窗组件
 interface TimePickerProps {
@@ -148,7 +149,7 @@ export default function Index() {
   const [showDeparturePicker, setShowDeparturePicker] = useState(false)
   const [showBoardingPicker, setShowBoardingPicker] = useState(false)
 
-  const handleStartPlan = () => {
+  const handleStartPlan = async () => {
     if (!flightNumber.trim()) {
       Taro.showToast({ title: '请输入航班号', icon: 'none' })
       return
@@ -176,6 +177,26 @@ export default function Index() {
       flightNumber: formattedFlight,
       departureTime,
       boardingTime
+    }
+
+    // 向后端注册航班计划，设置定时提醒
+    try {
+      Taro.showLoading({ title: '正在设置提醒...' })
+      await Network.request({
+        url: '/api/workflow/flights',
+        method: 'POST',
+        data: {
+          flightNumber: formattedFlight,
+          departureTime: departure.getTime(),
+          boardingTime: boarding.getTime()
+        }
+      })
+      Taro.hideLoading()
+      Taro.showToast({ title: '已设置提醒任务', icon: 'success' })
+    } catch (error) {
+      Taro.hideLoading()
+      console.error('注册航班计划失败', error)
+      // 继续跳转，即使后端注册失败
     }
 
     Taro.navigateTo({

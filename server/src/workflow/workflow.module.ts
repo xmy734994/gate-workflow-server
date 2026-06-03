@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common'
-import { WorkflowController } from './workflow.controller'
+import { ScheduleModule } from '@nestjs/schedule'
+import { WorkflowController, FlightPlanController } from './workflow.controller'
 import { WorkflowService } from './workflow.service'
 
 @Module({
-  controllers: [WorkflowController],
+  imports: [ScheduleModule.forRoot()],
+  controllers: [WorkflowController, FlightPlanController],
   providers: [WorkflowService],
   exports: [WorkflowService]
 })

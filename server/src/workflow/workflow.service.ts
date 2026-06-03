@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, OnModuleInit } from '@nestjs/common'
+import { Cron, CronExpression } from '@nestjs/schedule'
 
 export type RemindType = 'boarding' | 'departure'
 
@@ -10,8 +11,26 @@ export interface WorkflowItem {
   remindType: RemindType  // 基于登机时间还是起飞时间
 }
 
+export interface FlightPlan {
+  id: string
+  flightNumber: string
+  departureTime: number  // timestamp
+  boardingTime: number   // timestamp
+  reminders: ReminderTask[]
+  createdAt: number
+}
+
+export interface ReminderTask {
+  workflowItemId: number
+  workflowContent: string
+  remindTime: number  // timestamp
+  remindType: RemindType
+  sent: boolean        // 是否已发送
+  flightNumber: string
+}
+
 @Injectable()
-export class WorkflowService {
+export class WorkflowService implements OnModuleInit {
   private items: WorkflowItem[] = [
     { id: 1, content: '轮椅无陪信息确认', order: 1, remindMinutes: 15, remindType: 'boarding' },
     { id: 2, content: '行李预拉确认', order: 2, remindMinutes: 20, remindType: 'departure' },
@@ -23,7 +42,22 @@ export class WorkflowService {
     { id: 8, content: '八个一、三复核、登机系统流程复核', order: 8, remindMinutes: 15, remindType: 'boarding' }
   ]
 
+  private flightPlans: Map<string, FlightPlan> = new Map()
+  private pendingReminders: ReminderTask[] = []
+  
+  // 回调函数，用于发送订阅消息
+  private sendNotificationCallback: ((task: ReminderTask) => Promise<void>) | null = null
+
   private nextId = 9
+
+  onModuleInit() {
+    console.log('[WorkflowService] 服务已初始化，定时检查器已启动')
+  }
+
+  // 设置发送通知的回调
+  setNotificationCallback(callback: (task: ReminderTask) => Promise<void>) {
+    this.sendNotificationCallback = callback
+  }
 
   findAll(): WorkflowItem[] {
     return this.items.sort((a, b) => a.order - b.order)
@@ -86,5 +120,136 @@ export class WorkflowService {
     })
     // Sort by order
     return this.items.sort((a, b) => a.order - b.order)
+  }
+
+  // 创建航班计划并生成提醒任务
+  createFlightPlan(data: { flightNumber: string; departureTime: number; boardingTime: number }): FlightPlan {
+    const planId = `${data.flightNumber}_${Date.now()}`
+    const reminders: ReminderTask[] = []
+    
+    // 为每个工作流程项生成提醒任务
+    this.items.forEach(item => {
+      // 根据提醒类型计算提醒时间
+      const baseTime = item.remindType === 'departure' ? data.departureTime : data.boardingTime
+      const remindTime = baseTime - (item.remindMinutes * 60 * 1000)
+      
+      reminders.push({
+        workflowItemId: item.id,
+        workflowContent: item.content,
+        remindTime,
+        remindType: item.remindType,
+        sent: false,
+        flightNumber: data.flightNumber
+      })
+    })
+    
+    const plan: FlightPlan = {
+      id: planId,
+      flightNumber: data.flightNumber,
+      departureTime: data.departureTime,
+      boardingTime: data.boardingTime,
+      reminders,
+      createdAt: Date.now()
+    }
+    
+    this.flightPlans.set(planId, plan)
+    
+    // 将所有未过期的提醒加入待发送队列
+    const now = Date.now()
+    reminders
+      .filter(r => r.remindTime > now && !r.sent)
+      .forEach(r => {
+        if (!this.pendingReminders.find(pr => 
+          pr.flightNumber === r.flightNumber && 
+          pr.workflowItemId === r.workflowItemId &&
+          pr.remindTime === r.remindTime
+        )) {
+          this.pendingReminders.push(r)
+        }
+      })
+    
+    console.log(`[WorkflowService] 创建航班计划: ${data.flightNumber}, 生成 ${reminders.length} 个提醒任务`)
+    return plan
+  }
+
+  // 获取所有航班计划
+  getFlightPlans(): FlightPlan[] {
+    return Array.from(this.flightPlans.values()).sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  // 获取单个航班计划
+  getFlightPlan(flightNumber: string): FlightPlan | undefined {
+    return Array.from(this.flightPlans.values()).find(p => p.flightNumber === flightNumber)
+  }
+
+  // 获取待处理的提醒
+  getPendingReminders(): ReminderTask[] {
+    return this.pendingReminders.filter(r => !r.sent)
+  }
+
+  // 标记提醒已发送
+  markReminderSent(flightNumber: string, workflowItemId: number, remindTime: number): boolean {
+    const reminder = this.pendingReminders.find(r => 
+      r.flightNumber === flightNumber && 
+      r.workflowItemId === workflowItemId &&
+      r.remindTime === remindTime
+    )
+    
+    if (reminder) {
+      reminder.sent = true
+      // 从待处理队列中移除
+      this.pendingReminders = this.pendingReminders.filter(r => 
+        !(r.flightNumber === flightNumber && 
+          r.workflowItemId === workflowItemId &&
+          r.remindTime === remindTime)
+      )
+      
+      // 同时更新航班计划中的状态
+      this.flightPlans.forEach(plan => {
+        const task = plan.reminders.find(r => 
+          r.workflowItemId === workflowItemId && r.remindTime === remindTime
+        )
+        if (task) task.sent = true
+      })
+      
+      return true
+    }
+    return false
+  }
+
+  // 定时检查并发送提醒 - 每分钟执行一次
+  @Cron(CronExpression.EVERY_MINUTE)
+  async checkAndSendReminders() {
+    const now = Date.now()
+    const toSend: ReminderTask[] = []
+    
+    // 找出需要发送的提醒（时间已到但未发送）
+    this.pendingReminders = this.pendingReminders.filter(reminder => {
+      if (!reminder.sent && reminder.remindTime <= now) {
+        toSend.push(reminder)
+        return false // 发送后从待处理队列移除
+      }
+      return true
+    })
+    
+    // 发送所有到期的提醒
+    for (const task of toSend) {
+      console.log(`[WorkflowService] 发送提醒: ${task.flightNumber} - ${task.workflowContent}`)
+      
+      if (this.sendNotificationCallback) {
+        try {
+          await this.sendNotificationCallback(task)
+          this.markReminderSent(task.flightNumber, task.workflowItemId, task.remindTime)
+        } catch (error) {
+          console.error(`[WorkflowService] 发送提醒失败:`, error)
+          // 失败后重新加入队列，稍后重试
+          this.pendingReminders.push(task)
+        }
+      }
+    }
+    
+    if (toSend.length > 0) {
+      console.log(`[WorkflowService] 本分钟已发送 ${toSend.length} 个提醒`)
+    }
   }
 }

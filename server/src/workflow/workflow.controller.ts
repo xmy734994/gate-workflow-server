@@ -32,14 +32,16 @@ export class WorkflowController {
   }
 
   @Post()
-  create(@Body() body: { content: string; order?: number }) {
+  create(@Body() body: { content: string; order?: number; remindMinutes?: number; remindType?: string }) {
     if (!body.content || !body.content.trim()) {
       console.log(`[POST] /api/workflow/items - 内容不能为空`)
       return { code: 400, msg: '内容不能为空', data: null }
     }
     const item = this.workflowService.create({
       content: body.content.trim(),
-      order: body.order
+      order: body.order,
+      remindMinutes: body.remindMinutes,
+      remindType: body.remindType as any
     })
     console.log(`[POST] /api/workflow/items - 创建: ${item.content}`)
     return {
@@ -52,13 +54,16 @@ export class WorkflowController {
   @Put(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: Partial<{ content: string; order: number }>
+    @Body() body: Partial<{ content: string; order: number; remindMinutes: number; remindType: string }>
   ) {
     if (body.content !== undefined && !body.content.trim()) {
       console.log(`[PUT] /api/workflow/items/${id} - 内容不能为空`)
       return { code: 400, msg: '内容不能为空', data: null }
     }
-    const item = this.workflowService.update(id, body)
+    const item = this.workflowService.update(id, {
+      ...body,
+      remindType: body.remindType as any
+    })
     if (!item) {
       console.log(`[PUT] /api/workflow/items/${id} - 未找到`)
       return { code: 404, msg: '未找到该记录', data: null }
@@ -98,6 +103,79 @@ export class WorkflowController {
       code: 200,
       msg: 'success',
       data: items
+    }
+  }
+}
+
+// 航班计划控制器
+@Controller('workflow/flights')
+export class FlightPlanController {
+  constructor(private readonly workflowService: WorkflowService) {}
+
+  @Post()
+  createFlightPlan(@Body() body: { flightNumber: string; departureTime: number; boardingTime: number }) {
+    if (!body.flightNumber || !body.departureTime || !body.boardingTime) {
+      return { code: 400, msg: '参数不完整', data: null }
+    }
+    
+    const plan = this.workflowService.createFlightPlan({
+      flightNumber: body.flightNumber.toUpperCase(),
+      departureTime: body.departureTime,
+      boardingTime: body.boardingTime
+    })
+    
+    console.log(`[POST] /api/workflow/flights - 创建航班计划: ${plan.flightNumber}`)
+    return {
+      code: 200,
+      msg: 'success',
+      data: plan
+    }
+  }
+
+  @Get()
+  getFlightPlans() {
+    const plans = this.workflowService.getFlightPlans()
+    return {
+      code: 200,
+      msg: 'success',
+      data: plans
+    }
+  }
+
+  @Get(':flightNumber')
+  getFlightPlan(@Param('flightNumber') flightNumber: string) {
+    const plan = this.workflowService.getFlightPlan(flightNumber)
+    if (!plan) {
+      return { code: 404, msg: '未找到该航班计划', data: null }
+    }
+    return {
+      code: 200,
+      msg: 'success',
+      data: plan
+    }
+  }
+
+  @Get('pending/reminders')
+  getPendingReminders() {
+    const reminders = this.workflowService.getPendingReminders()
+    return {
+      code: 200,
+      msg: 'success',
+      data: reminders
+    }
+  }
+
+  @Post('reminders/:flightNumber/:workflowItemId/:remindTime/mark-sent')
+  markReminderSent(
+    @Param('flightNumber') flightNumber: string,
+    @Param('workflowItemId', ParseIntPipe) workflowItemId: number,
+    @Param('remindTime', ParseIntPipe) remindTime: number
+  ) {
+    const success = this.workflowService.markReminderSent(flightNumber, workflowItemId, remindTime)
+    return {
+      code: success ? 200 : 400,
+      msg: success ? 'success' : '标记失败',
+      data: { success }
     }
   }
 }
