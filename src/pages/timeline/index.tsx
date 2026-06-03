@@ -3,7 +3,6 @@ import { View, Text } from '@tarojs/components'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
 import { 
@@ -197,6 +196,16 @@ export default function Timeline() {
             }
           } catch (err) {
             console.error('触发订阅消息失败', err)
+          }
+        }
+
+        // 震动提示（小程序端）- 强烈震动吸引注意
+        if (isMiniApp) {
+          try {
+            // 使用多次短震动，比一次长震动更有效
+            Taro.vibrateShort && Taro.vibrateShort({ type: 'heavy' })
+          } catch (err) {
+            console.error('震动提示失败', err)
           }
         }
 
@@ -581,53 +590,89 @@ export default function Timeline() {
         </Button>
       </View>
 
-      {/* 提醒弹窗 */}
-      <Dialog open={showAlert} onOpenChange={setShowAlert}>
-        <DialogContent className="bg-white">
-          <View className="text-center py-4">
-            <View className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-              <Bell size={32} color="#f59e0b" />
+      {/* 提醒弹窗 - 使用固定定位确保在屏幕中央弹出 */}
+      <View 
+        style={{ 
+          display: showAlert ? 'flex' : 'none',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          zIndex: 9999,
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}
+        onClick={() => {}}
+      >
+        <View 
+          className="bg-white rounded-2xl w-11/12 max-w-sm mx-4 overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 顶部警示条 */}
+          <View className="h-2 bg-gradient-to-r from-amber-400 to-orange-500" />
+          
+          <View className="text-center py-6 px-4">
+            {/* 动画闪烁的铃铛图标 */}
+            <View className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <Bell size={40} color="#f59e0b" />
             </View>
-            <DialogTitle className="text-lg font-semibold text-gray-900 mb-2">
-              <Text className="block">提醒：该确认了</Text>
-            </DialogTitle>
+            
+            <Text className="block text-xl font-bold text-red-600 mb-1">
+              登机提醒
+            </Text>
             {alertItem && (
-              <DialogDescription className="text-center">
-                <Text className="block text-base font-medium text-gray-800 mb-1">
+              <View className="mt-4">
+                <Text className="block text-lg font-semibold text-gray-800 mb-2">
                   {alertItem.title}
                 </Text>
-                <Text className="block text-sm text-gray-500 mb-1">
-                  {alertItem.timeLabel}
-                </Text>
-                <Text className="block text-xs text-gray-400 mt-2">
+                <View className="bg-amber-50 rounded-lg py-2 px-3 inline-block mb-2">
+                  <Text className="block text-amber-700 font-medium">
+                    {alertItem.timeLabel}
+                  </Text>
+                </View>
+                <Text className="block text-sm text-gray-500 mt-2 px-2">
                   {alertItem.description}
                 </Text>
-              </DialogDescription>
+              </View>
             )}
           </View>
-          <View className="flex gap-3 mt-4">
-            <Button 
-              variant="outline" 
-              className="flex-1"
-              onClick={() => setShowAlert(false)}
-            >
-              <Text>稍后</Text>
-            </Button>
-            <Button 
-              className="flex-1 bg-blue-600"
-              onClick={() => {
-                setShowAlert(false)
-                if (alertItem) {
-                  handleConfirm(alertItem)
-                }
-              }}
-            >
-              <CircleCheck size={18} color="#ffffff" className="mr-2" />
-              <Text>立即确认</Text>
-            </Button>
+          
+          {/* 操作按钮 */}
+          <View className="flex gap-3 p-4 border-t border-gray-100">
+            <View className="flex-1">
+              <Button 
+                variant="outline" 
+                className="w-full h-12 border-gray-300"
+                onClick={() => {
+                  setShowAlert(false)
+                  // 震动提示稍后仍然重要
+                  Taro.vibrateShort && Taro.vibrateShort({ type: 'light' })
+                }}
+              >
+                <Text className="text-gray-600">稍后</Text>
+              </Button>
+            </View>
+            <View className="flex-1">
+              <Button 
+                className="w-full h-12 bg-gradient-to-r from-green-500 to-emerald-600"
+                onClick={() => {
+                  setShowAlert(false)
+                  if (alertItem) {
+                    handleConfirm(alertItem)
+                  }
+                  // 确认成功震动
+                  Taro.vibrateShort && Taro.vibrateShort({ type: 'medium' })
+                }}
+              >
+                <CircleCheck size={18} color="#ffffff" className="mr-2" />
+                <Text className="text-white font-semibold">立即确认</Text>
+              </Button>
+            </View>
           </View>
-        </DialogContent>
-      </Dialog>
+        </View>
+      </View>
     </View>
   )
 }
