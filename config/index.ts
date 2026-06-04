@@ -187,8 +187,9 @@ export default defineConfig<'vite'>(async (merge, _env) => {
         open: false,
         proxy: {
           '/api': {
-            target: process.env.SERVER_PORT ? `http://localhost:${process.env.SERVER_PORT}` : 'http://localhost:5000',
+            target: 'https://cz-266108-10-1439984716.sh.run.tcloudbase.com',
             changeOrigin: true,
+            secure: false,
           },
         },
       },
