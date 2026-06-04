@@ -1,341 +1,197 @@
 /**
  * 订阅消息页面
- * 集成个推小程序 SDK，实现真正的后台推送
+ * 使用纯服务端方式获取 openid 并绑定个推，无需插件
  */
 import { useState, useEffect } from 'react'
 import { View, Text, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
+import { Network } from '@/network'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
-import { Network } from '@/network'
 import { Bell, CircleCheck, CircleX } from 'lucide-react-taro'
 
-// 个推配置 - 请替换为你实际的个推 AppID
-const GETUI_APP_ID = 'u8Cmrscepa7c3seDiioF8'
-
-// 订阅提醒项配置
-const SUBSCRIPTION_ITEMS = [
-  {
-    id: 'WHEELCHAIR',
-    title: '轮椅无陪确认',
-    desc: '登机前15分钟提醒',
-    templateId: 'wheelchair_reminder'
-  },
-  {
-    id: 'BAGGAGE_PRE',
-    title: '行李预拉确认',
-    desc: '起飞前20分钟提醒',
-    templateId: 'baggage_pre_reminder'
-  },
-  {
-    id: '综合确认',
-    title: '综合确认提醒',
-    desc: '起飞前17分钟：行李、舱单、货舱、交接',
-    templateId: '的综合_confirm'
-  },
-  {
-    id: 'BAGGAGE_PULL',
-    title: '行李拉下确认',
-    desc: '起飞前16分钟提醒',
-    templateId: 'baggage_pull_reminder'
-  },
-  {
-    id: 'MANIFEST',
-    title: '舱单确认提醒',
-    desc: '起飞前15分钟提醒',
-    templateId: 'manifest_reminder'
-  },
-  {
-    id: 'BOARDING_PREP',
-    title: '登机准备确认',
-    desc: '登机时间：设备、系统、门禁、告示',
-    templateId: 'boarding_prep_reminder'
-  },
-  {
-    id: 'BOARDING_KEY',
-    title: '关键流程复核',
-    desc: '登机前15分钟：八个一、三复核、登机系统',
-    templateId: 'boarding_key_reminder'
-  }
+// 提醒类型配置
+const REMINDER_TYPES = [
+  { key: 'wheelchair', label: '轮椅无陪信息确认', description: '登机前15分钟提醒' },
+  { key: 'baggage_pre', label: '行李预拉确认', description: '起飞前20分钟提醒' },
+  { key: 'comprehensive', label: '行李/舱单/货舱/交接确认', description: '起飞前17分钟提醒' },
+  { key: 'baggage_pull', label: '行李拉下操作', description: '起飞前16分钟提醒' },
+  { key: 'manifest_confirm', label: '舱单和货舱确认', description: '起飞前15分钟提醒' },
+  { key: 'boarding_prep', label: '现场准备确认', description: '登机时间提醒' },
+  { key: 'key_process', label: '关键流程复核', description: '登机前15分钟提醒' },
 ]
 
 export default function SubscribePage() {
   const [pushEnabled, setPushEnabled] = useState(false)
-  const [pushStatus, setPushStatus] = useState<'pending' | 'success' | 'failed'>('pending')
-  const [registrationId, setRegistrationId] = useState('')
+  const [binding, setBinding] = useState(false)
+  const [status, setStatus] = useState<'pending' | 'success' | 'failed'>('pending')
+  const [openid, setOpenid] = useState('')
   const [subscriptions, setSubscriptions] = useState<Record<string, boolean>>({})
-  
-  
   const isMiniApp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP || Taro.getEnv() === Taro.ENV_TYPE.TT
 
   useEffect(() => {
-    // 加载本地保存的状态
-    const savedPushEnabled = Taro.getStorageSync('push_enabled') || false
-    const savedRegId = Taro.getStorageSync('registration_id') || ''
-    const savedSubs = Taro.getStorageSync('user_subscriptions') || {}
-    
-    setPushEnabled(savedPushEnabled)
-    setRegistrationId(savedRegId)
-    setPushStatus(savedRegId ? 'success' : 'pending')
-    
-    const initialSubs: Record<string, boolean> = {}
-    SUBSCRIPTION_ITEMS.forEach(item => {
-      initialSubs[item.id] = savedSubs[item.id] || false
-    })
-    setSubscriptions(initialSubs)
-
-    // 如果已启用推送且有 registrationId，自动同步到后端
-    if (savedPushEnabled && savedRegId) {
-      syncDeviceToBackend(savedRegId)
+    if (isMiniApp) {
+      // 检查本地保存的状态
+      const savedOpenid = Taro.getStorageSync('user_openid')
+      const savedEnabled = Taro.getStorageSync('push_enabled')
+      const savedSubs = Taro.getStorageSync('push_subscriptions')
+      
+      if (savedOpenid) {
+        setOpenid(savedOpenid)
+        setPushEnabled(savedEnabled)
+        setSubscriptions(savedSubs || {})
+        setStatus('success')
+      }
     }
-  }, [])
+  }, [isMiniApp])
 
-  // 初始化个推
-  const initGetui = async () => {
+  const handleEnablePush = async () => {
     if (!isMiniApp) {
-      Taro.showToast({ title: '仅支持微信/抖音小程序', icon: 'none' })
+      Taro.showToast({ title: '仅支持小程序环境', icon: 'none' })
       return
     }
 
-    setPushStatus('pending')
-    
+    setBinding(true)
     try {
-      // 根据不同平台调用对应的个推 API
-      if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
-        // 微信小程序
-        await initWechatGetui()
-      } else if (Taro.getEnv() === Taro.ENV_TYPE.TT) {
-        // 抖音小程序
-        await initDouyinGetui()
+      // 1. 调用 wx.login 获取 code
+      const loginRes = await Taro.login()
+      if (!loginRes.code) {
+        Taro.showToast({ title: '获取登录凭证失败', icon: 'none' })
+        setBinding(false)
+        return
       }
-    } catch (error) {
-      console.error('[Subscribe] 个推初始化失败:', error)
-      setPushStatus('failed')
-      Taro.showToast({ title: '推送初始化失败', icon: 'none' })
-    }
-  }
 
-  // 微信小程序个推初始化
-  const initWechatGetui = async () => {
-    try {
-      // 获取 clientid (相当于 registrationId)
-      // 个推微信小程序 SDK 的具体 API 需要参考个推官方文档
-      // 这里使用模拟方式，实际需要引入个推微信小程序 SDK
-      
-      // 尝试获取用户标识
-      const loginResult = await Taro.login()
-      if (loginResult.code) {
-        // 发送 code 到后端获取 clientid
-        const response = await Network.request({
-          url: '/api/jpush/wxlogin',
-          method: 'POST',
-          data: { 
-            code: loginResult.code,
-            appId: GETUI_APP_ID
-          }
-        })
-        
-        if (response.data?.code === 200 && response.data?.data?.clientid) {
-          const clientid = response.data.data.clientid
-          setRegistrationId(clientid)
-          setPushStatus('success')
-          Taro.setStorageSync('registration_id', clientid)
-          
-          // 同步到后端
-          await syncDeviceToBackend(clientid)
-          
-          Taro.showToast({ title: '推送初始化成功', icon: 'success' })
-        } else {
-          setPushStatus('failed')
-          Taro.showToast({ title: '获取推送ID失败', icon: 'none' })
-        }
-      }
-    } catch (error) {
-      console.error('[Subscribe] 微信个推初始化失败:', error)
-      setPushStatus('failed')
-    }
-  }
-
-  // 抖音小程序个推初始化
-  const initDouyinGetui = async () => {
-    try {
-      // 抖音小程序的个推集成方式
-      // 实际需要参考个推抖音小程序 SDK 文档
-      setPushStatus('success')
-      Taro.showToast({ title: '抖音推送初始化成功', icon: 'success' })
-    } catch (error) {
-      console.error('[Subscribe] 抖音个推初始化失败:', error)
-      setPushStatus('failed')
-    }
-  }
-
-  // 同步设备信息到后端
-  const syncDeviceToBackend = async (clientid: string) => {
-    try {
-      await Network.request({
-        url: '/api/jpush/register',
+      // 2. 发送到后端获取 openid 并绑定个推
+      const res = await Network.request({
+        url: '/api/jpush/wxlogin',
         method: 'POST',
         data: {
-          clientid,
-          platform: Taro.getEnv() === Taro.ENV_TYPE.WEAPP ? 'weapp' : 'douyin',
-          enabled: true
+          code: loginRes.code,
+          appId: 'u8Cmrscepa7c3seDiioF8'
         }
       })
-      console.log('[Subscribe] 设备信息已同步到后端')
-    } catch (error) {
-      console.error('[Subscribe] 同步设备信息失败:', error)
+
+      console.log('后端返回:', res.data)
+
+      if (res.data?.data?.openid) {
+        const userOpenid = res.data.data.openid
+        
+        // 3. 保存到本地
+        Taro.setStorageSync('user_openid', userOpenid)
+        Taro.setStorageSync('push_enabled', true)
+        
+        setOpenid(userOpenid)
+        setPushEnabled(true)
+        setStatus('success')
+        
+        Taro.showToast({ title: '开启推送成功', icon: 'success' })
+      } else {
+        Taro.showToast({ title: '开启推送失败，请重试', icon: 'none' })
+        setStatus('failed')
+      }
+    } catch (err) {
+      console.error('开启推送失败:', err)
+      Taro.showToast({ title: '网络错误，请重试', icon: 'none' })
+      setStatus('failed')
+    } finally {
+      setBinding(false)
     }
   }
 
-  const handleTogglePush = async (checked: boolean) => {
-    setPushEnabled(checked)
-    Taro.setStorageSync('push_enabled', checked)
-    
-    if (checked) {
-      // 启用推送，初始化个推
-      await initGetui()
-    } else {
-      // 禁用推送
-      setRegistrationId('')
-      setPushStatus('pending')
-      Taro.setStorageSync('registration_id', '')
-    }
-  }
+  const toggleSubscription = async (key: string) => {
+    const newSubs = { ...subscriptions, [key]: !subscriptions[key] }
+    setSubscriptions(newSubs)
+    Taro.setStorageSync('push_subscriptions', newSubs)
 
-  const handleToggleSubscription = async (id: string, checked: boolean) => {
-    if (!pushEnabled || pushStatus !== 'success') {
-      Taro.showToast({ title: '请先开启推送功能', icon: 'none' })
-      return
-    }
-    
-    setSubscriptions(prev => ({ ...prev, [id]: checked }))
-    
-  }
-
-  const handleSaveSubscriptions = async () => {
-    if (!registrationId) {
-      Taro.showToast({ title: '请先开启推送功能', icon: 'none' })
-      return
-    }
-
+    // 保存到后端
     try {
       await Network.request({
         url: '/api/jpush/subscriptions',
         method: 'POST',
         data: {
-          clientid: registrationId,
-          subscriptions
+          openid,
+          subscriptions: newSubs
         }
       })
-      
-      // 保存到本地
-      Taro.setStorageSync('user_subscriptions', subscriptions)
-      
-      Taro.showToast({ title: '保存成功', icon: 'success' })
-    } catch (error) {
-      console.error('[Subscribe] 保存订阅失败:', error)
-      Taro.showToast({ title: '保存失败', icon: 'none' })
+    } catch (err) {
+      console.error('保存订阅设置失败:', err)
     }
   }
 
-  const handleRefreshStatus = () => {
-    if (pushEnabled) {
-      initGetui()
+  const renderStatusIcon = () => {
+    if (status === 'success') {
+      return <CircleCheck size={24} color="#22c55e" />
+    } else if (status === 'failed') {
+      return <CircleX size={24} color="#ef4444" />
     }
+    return null
   }
 
   return (
-    <View className="min-h-screen bg-gray-50 pb-safe">
-      {/* 顶部标题 */}
-      <View className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-5">
-        <Text className="block text-white text-xl font-bold">推送设置</Text>
-        <Text className="block text-blue-100 text-sm mt-1">开启后可在后台/息屏时收到提醒</Text>
-      </View>
+    <ScrollView className="min-h-screen bg-gray-50 pb-safe">
+      <View className="p-4">
+        {/* 页面标题 */}
+        <View className="mb-6">
+          <Text className="block text-2xl font-bold text-gray-900">推送设置</Text>
+          <Text className="block text-sm text-gray-500 mt-1">
+            开启推送接收登机口工作提醒
+          </Text>
+        </View>
 
-      <ScrollView scrollY className="p-4" style={{ height: 'calc(100vh - 180px)' }}>
-        {/* 推送总开关 */}
+        {/* 推送状态卡片 */}
         <Card className="mb-4">
-          <CardContent className="p-4">
-            <View className="flex items-center justify-between">
-              <View className="flex items-center gap-3">
-                <View className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Bell size={20} color="#2563eb" />
-                </View>
-                <View>
-                  <Text className="block text-gray-900 font-medium">消息推送</Text>
-                  <Text className="block text-gray-500 text-sm">
-                    {pushEnabled ? '已开启' : '已关闭'}
-                  </Text>
-                </View>
+          <CardContent className="p-6">
+            <View className="flex items-center gap-4">
+              <View className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bell size={24} color="#3b82f6" />
               </View>
-              <Switch
-                checked={pushEnabled}
-                onCheckedChange={handleTogglePush}
-              />
+              <View className="flex-1">
+                <Text className="block text-lg font-semibold text-gray-900">
+                  推送通知 {renderStatusIcon()}
+                </Text>
+                {status === 'success' && openid && (
+                  <Text className="block text-xs text-gray-500 mt-1">
+                    已绑定用户: {openid.slice(0, 10)}...
+                  </Text>
+                )}
+              </View>
             </View>
+            
+            <Button
+              className="w-full mt-4"
+              onClick={handleEnablePush}
+              disabled={binding || (status === 'success')}
+            >
+              <Text>{binding ? '绑定中...' : status === 'success' ? '已开启' : '开启推送'}</Text>
+            </Button>
           </CardContent>
         </Card>
 
-        {/* 推送状态 */}
-        {pushEnabled && (
-          <Card className="mb-4">
-            <CardContent className="p-4">
-              <View className="flex items-center justify-between">
-                <View>
-                  <Text className="block text-gray-700 text-sm font-medium">推送状态</Text>
-                  <Text className="block text-gray-500 text-xs mt-1">
-                    {pushStatus === 'pending' && '正在初始化...'}
-                    {pushStatus === 'success' && `已注册: ${registrationId.slice(0, 20)}...`}
-                    {pushStatus === 'failed' && '初始化失败，请重试'}
-                  </Text>
-                </View>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRefreshStatus}
-                >
-                  <Text>刷新</Text>
-                </Button>
-              </View>
-              
-              {pushStatus === 'success' && (
-                <View className="mt-3 p-2 bg-green-50 rounded-lg flex items-center gap-2">
-                  <CircleCheck size={16} color="#16a34a" />
-                  <Text className="block text-green-700 text-sm">推送功能正常</Text>
-                </View>
-              )}
-              
-              {pushStatus === 'failed' && (
-                <View className="mt-3 p-2 bg-red-50 rounded-lg flex items-center gap-2">
-                  <CircleX size={16} color="#dc2626" />
-                  <Text className="block text-red-700 text-sm">初始化失败，请点击刷新重试</Text>
-                </View>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 订阅提醒项 */}
-        <Card className="mb-4">
+        {/* 提醒类型列表 */}
+        <Card>
           <CardHeader>
-            <CardTitle>提醒订阅</CardTitle>
+            <CardTitle>提醒类型</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {SUBSCRIPTION_ITEMS.map((item, index) => (
+            {REMINDER_TYPES.map((item, index) => (
               <View
-                key={item.id}
-                className={`px-4 py-3 ${index !== SUBSCRIPTION_ITEMS.length - 1 ? 'border-b border-gray-100' : ''}`}
+                key={item.key}
+                className={`flex items-center justify-between p-4 ${index !== REMINDER_TYPES.length - 1 ? 'border-b border-gray-100' : ''}`}
               >
-                <View className="flex items-center justify-between">
-                  <View className="flex-1">
-                    <Text className="block text-gray-900 font-medium">{item.title}</Text>
-                    <Text className="block text-gray-500 text-sm">{item.desc}</Text>
-                  </View>
-                  <Switch
-                    checked={subscriptions[item.id] || false}
-                    onCheckedChange={(checked) => handleToggleSubscription(item.id, checked)}
-                    disabled={!pushEnabled || pushStatus !== 'success'}
+                <View className="flex-1">
+                  <Text className="block font-medium text-gray-900">{item.label}</Text>
+                  <Text className="block text-xs text-gray-500 mt-0.5">{item.description}</Text>
+                </View>
+                <View
+                  onClick={() => pushEnabled && toggleSubscription(item.key)}
+                  className={`w-12 h-7 rounded-full relative transition-colors ${
+                    subscriptions[item.key] ? 'bg-blue-500' : 'bg-gray-300'
+                  } ${!pushEnabled ? 'opacity-50' : ''}`}
+                >
+                  <View
+                    className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      subscriptions[item.key] ? 'translate-x-6' : 'translate-x-1'
+                    }`}
                   />
                 </View>
               </View>
@@ -343,22 +199,14 @@ export default function SubscribePage() {
           </CardContent>
         </Card>
 
-        {/* 保存按钮 */}
-        <Button
-          className="w-full"
-          onClick={handleSaveSubscriptions}
-          disabled={!registrationId}
-        >
-          保存订阅设置
-        </Button>
-
-        {/* 提示信息 */}
-        <View className="mt-4 p-3 bg-amber-50 rounded-lg">
-          <Text className="block text-amber-800 text-sm">
-            💡 提示：开启推送后，即使小程序在后台或手机息屏，也能收到提醒通知。
+        {/* 说明 */}
+        <View className="mt-6 p-4 bg-blue-50 rounded-xl">
+          <Text className="block text-sm text-blue-800">
+            <Text className="font-semibold">温馨提示：</Text>
+            {'\n'}开启推送后，当有登机口工作提醒时，您将收到微信服务通知。请确保已在微信中允许通知权限。
           </Text>
         </View>
-      </ScrollView>
-    </View>
+      </View>
+    </ScrollView>
   )
 }
