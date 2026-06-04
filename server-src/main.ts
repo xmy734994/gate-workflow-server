@@ -13,6 +13,13 @@ if (!globalThis.crypto) {
 }
 
 function parsePort(): number {
+  // 优先使用环境变量 PORT
+  const envPort = parseInt(process.env.PORT || '', 10);
+  if (!isNaN(envPort) && envPort > 0 && envPort < 65536) {
+    return envPort;
+  }
+  
+  // 其次检查命令行参数 -p
   const args = process.argv.slice(2);
   const portIndex = args.indexOf('-p');
   if (portIndex !== -1 && args[portIndex + 1]) {
@@ -21,7 +28,9 @@ function parsePort(): number {
       return port;
     }
   }
-  return 80;
+  
+  // 本地开发默认 3000，云托管部署默认 80
+  return process.env.NODE_ENV === 'production' ? 80 : 3000;
 }
 
 async function bootstrap() {

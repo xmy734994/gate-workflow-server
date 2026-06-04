@@ -93,7 +93,7 @@ export default defineConfig<'vite'>(async (merge, _env) => {
       PROJECT_DOMAIN: JSON.stringify(
         process.env.PROJECT_DOMAIN ||
           process.env.COZE_PROJECT_DOMAIN_DEFAULT ||
-          '',
+          'https://cz-266108-10-1439984716.sh.run.tcloudbase.com',
       ),
       TARO_ENV: JSON.stringify(process.env.TARO_ENV),
     },
@@ -187,7 +187,7 @@ export default defineConfig<'vite'>(async (merge, _env) => {
         open: false,
         proxy: {
           '/api': {
-            target: 'http://localhost:3000',
+            target: process.env.SERVER_PORT ? `http://localhost:${process.env.SERVER_PORT}` : 'http://localhost:5000',
             changeOrigin: true,
           },
         },

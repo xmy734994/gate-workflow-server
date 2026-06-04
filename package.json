@@ -5,7 +5,9 @@
   "description": "NestJS server application",
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:h5\"",
+    "dev:server": "nest start --watch",
+    "dev:h5": "NODE_OPTIONS='--max-old-space-size=8192' taro build --type h5 --watch",
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main"
@@ -33,9 +35,28 @@
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",
     "@nestjs/schematics": "^10.2.3",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@tarojs/cli": "^4.2.0",
+    "@tarojs/components": "^4.2.0",
+    "@tarojs/plugin-framework-react": "^4.2.0",
+    "@tarojs/plugin-generator": "^4.2.0",
+    "@tarojs/plugin-platform-h5": "^4.2.0",
+    "@tarojs/plugin-platform-weapp": "^4.2.0",
+    "@tarojs/react": "^4.2.0",
+    "@tarojs/runtime": "^4.2.0",
+    "@tarojs/vite-runner": "^4.2.0",
+    "@tarojs/webpack5-runner": "^4.2.0",
     "@types/express": "5.0.6",
     "@types/node": "^22.10.2",
+    "@vitejs/plugin-react": "^6.0.2",
+    "autoprefixer": "^10.5.0",
+    "concurrently": "^10.0.3",
     "drizzle-kit": "^0.31.8",
-    "typescript": "^5.7.2"
+    "postcss": "^8.5.15",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "^5.7.2",
+    "vite": "^8.0.16",
+    "weapp-tailwindcss": "^4.12.0"
   }
 }
