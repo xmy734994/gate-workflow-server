@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 start_service() {
-    cd "${COZE_WORKSPACE_PATH}/server/dist"
+    cd "${COZE_WORKSPACE_PATH}/dist"
 
     local port="${DEPLOY_RUN_PORT:-3000}"
     echo "Starting Static File Server on port ${port} for deploy..."
