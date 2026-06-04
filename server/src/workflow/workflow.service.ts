@@ -168,7 +168,7 @@ export class WorkflowService implements OnModuleInit {
   }
 
   // 创建航班计划并生成提醒任务
-  createFlightPlan(data: { flightNumber: string; departureTime: number; boardingTime: number; openid?: string }): FlightPlan {
+  createFlightPlan(data: { flightNumber: string; departureTime: number; boardingTime: number; openid?: string; registrationId?: string }): FlightPlan {
     const planId = `${data.flightNumber}_${Date.now()}`
     const reminders: ReminderTask[] = []
     
@@ -185,7 +185,8 @@ export class WorkflowService implements OnModuleInit {
         remindType: item.remindType,
         sent: false,
         flightNumber: data.flightNumber,
-        openid: data.openid // 传递 openid
+        openid: data.openid, // 传递 openid
+        registrationId: data.registrationId // 传递 registrationId
       })
     })
     
@@ -195,6 +196,7 @@ export class WorkflowService implements OnModuleInit {
       departureTime: data.departureTime,
       boardingTime: data.boardingTime,
       openid: data.openid,
+      registrationId: data.registrationId,
       reminders,
       createdAt: Date.now()
     }
