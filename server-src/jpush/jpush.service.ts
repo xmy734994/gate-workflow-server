@@ -259,11 +259,12 @@ export class JpushService {
       return s
     }
 
-    function hex(x: string[]): string {
+    function hex(x: number[]): string {
+      let result = ''
       for (let i = 0; i < x.length; i++) {
-        x[i] = rhex(x[i])
+        result += rhex(x[i])
       }
-      return x.join('')
+      return result
     }
 
     function add32(a: number, b: number): number {
