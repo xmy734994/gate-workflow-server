@@ -9,6 +9,7 @@ import { Network } from '@/network'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Bell, CircleCheck, CircleX } from 'lucide-react-taro'
+import { initJPush, getRegistrationId } from '@/lib/jpush'
 
 // 提醒类型配置
 const REMINDER_TYPES = [
@@ -42,6 +43,9 @@ export default function SubscribePage() {
         setSubscriptions(savedSubs || {})
         setStatus('success')
       }
+      
+      // 初始化个推
+      initJPush('u8Cmrscepa7c3seDiioF8')
     }
   }, [isMiniApp])
 
@@ -61,13 +65,27 @@ export default function SubscribePage() {
         return
       }
 
+      // 等待获取 Registration ID
+      let registrationId = ''
+      let retries = 0
+      while (!registrationId && retries < 10) {
+        registrationId = getRegistrationId()
+        if (!registrationId) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+          retries++
+        }
+      }
+      
+      console.log('[订阅] 获取到 RegistrationId:', registrationId)
+
       // 2. 发送到后端获取 openid 并绑定个推
       const res = await Network.request({
         url: '/api/jpush/wxlogin',
         method: 'POST',
         data: {
           code: loginRes.code,
-          appId: 'u8Cmrscepa7c3seDiioF8'
+          appId: 'u8Cmrscepa7c3seDiioF8',
+          registrationId: registrationId
         }
       })
 
@@ -79,6 +97,7 @@ export default function SubscribePage() {
         // 3. 保存到本地
         Taro.setStorageSync('user_openid', userOpenid)
         Taro.setStorageSync('push_enabled', true)
+        Taro.setStorageSync('registration_id', registrationId)
         
         setOpenid(userOpenid)
         setPushEnabled(true)
@@ -142,7 +161,7 @@ export default function SubscribePage() {
         <Card className="mb-4">
           <CardContent className="p-6">
             <View className="flex items-center gap-4">
-              <View className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <View className="w-12 h-12 rounded-full bg-primary bg-opacity-10 flex items-center justify-center">
                 <Bell size={24} color="#3b82f6" />
               </View>
               <View className="flex-1">
@@ -180,7 +199,7 @@ export default function SubscribePage() {
               >
                 <View className="flex-1">
                   <Text className="block font-medium text-gray-900">{item.label}</Text>
-                  <Text className="block text-xs text-gray-500 mt-0.5">{item.description}</Text>
+                  <Text className="block text-xs text-gray-500 mt-1">{item.description}</Text>
                 </View>
                 <View
                   onClick={() => pushEnabled && toggleSubscription(item.key)}

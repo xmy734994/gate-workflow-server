@@ -21,9 +21,9 @@ export class JpushService {
   private token: GetuiToken | null = null
 
   constructor(private configService: ConfigService) {
-    this.appId = this.configService.get<string>('GETUI_APP_ID') || 'u8Cmrscepa7c3seDiioF8'
-    this.appKey = this.configService.get<string>('GETUI_APP_KEY') || 'mYUB4VjCKF9VkS5BA0E5I'
-    this.appSecret = this.configService.get<string>('GETUI_MASTER_SECRET') || '0KiFN0zvAB7eRYiamQQFIA'
+    this.appId = this.configService.get<string>('JPUSH_APP_ID') || 'u8Cmrscepa7c3seDiioF8'
+    this.appKey = this.configService.get<string>('JPUSH_APP_KEY') || 'mYUB4VjCKF9VkS5BA0E5I'
+    this.appSecret = this.configService.get<string>('JPUSH_MASTER_SECRET') || '0KiFN0zvAB7eRYiamQQFIA'
   }
 
   /**

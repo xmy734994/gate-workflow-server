@@ -40,34 +40,35 @@ export class JpushController {
    * 微信小程序登录，获取个推 clientid
    */
   @Post('wxlogin')
-  async wxLogin(@Body() body: { code: string; appId: string }) {
+  async wxLogin(@Body() body: { code: string; appId: string; registrationId?: string }) {
     try {
-      const { code, appId } = body
+      const { code, appId, registrationId } = body
       
       // 调用微信接口获取 openid
-      const appId2 = this.configService.get<string>('WECHAT_APP_ID') || 'wxabcdef1234567890'
-      const appSecret = this.configService.get<string>('WECHAT_APP_SECRET') || 'your_app_secret'
+      const wxAppId = this.configService.get<string>('WECHAT_APP_ID') || 'wxabcdef1234567890'
+      const wxAppSecret = this.configService.get<string>('WECHAT_APP_SECRET') || 'your_app_secret'
       
       const wxResponse = await axios.get(
-        `https://api.weixin.qq.com/sns/jscode2session?appid=${appId2}&secret=${appSecret}&js_code=${code}&grant_type=authorization_code`
+        `https://api.weixin.qq.com/sns/jscode2session?appid=${wxAppId}&secret=${wxAppSecret}&js_code=${code}&grant_type=authorization_code`
       )
       
       if (wxResponse.data.openid) {
         const openid = wxResponse.data.openid
         
-        // 注册到个推获取 clientid
-        const getuiAppId = this.configService.get<string>('GETUI_APP_ID') || 'u8Cmrscepa7c3seDiioF8'
-        const getuiAppKey = this.configService.get<string>('GETUI_APP_KEY') || 'mYUB4VjCKF9VkS5BA0E5I'
-        const getuiMasterSecret = this.configService.get<string>('GETUI_MASTER_SECRET') || '0KiFN0zvAB7eRYiamQQFIA'
+        // 注册到个推获取 clientid（使用 Registration ID）
+        const gtAppId = this.configService.get<string>('JPUSH_APP_ID') || 'u8Cmrscepa7c3seDiioF8'
+        const gtAppKey = this.configService.get<string>('JPUSH_APP_KEY') || 'mYUB4VjCKF9VkS5BA0E5I'
+        const gtMasterSecret = this.configService.get<string>('JPUSH_MASTER_SECRET') || '0KiFN0zvAB7eRYiamQQFIA'
         
-        const clientid = await this.jpushService.registerUser(openid, appId, getuiAppId, getuiAppKey, getuiMasterSecret)
+        // 如果有 Registration ID，使用它；否则生成 mock clientid
+        const clientid = registrationId || await this.jpushService.registerUser(openid, appId, gtAppId, gtAppKey, gtMasterSecret)
         
-        console.log('[JPush] 用户注册成功:', { openid, clientid })
+        console.log('[JPush] 用户注册成功:', { openid, clientid, registrationId })
         
         return {
           code: 200,
           msg: 'success',
-          data: { clientid, openid },
+          data: { clientid, openid, registrationId },
         }
       } else {
         console.error('[JPush] 微信登录失败:', wxResponse.data)
