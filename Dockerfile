@@ -10,6 +10,9 @@ COPY package*.json ./
 # 安装依赖
 RUN npm install --registry=https://registry.npmmirror.com
 
+# 复制配置文件
+COPY tsconfig.json nest-cli.json ./
+
 # 复制源代码
 COPY server-src ./src
 
