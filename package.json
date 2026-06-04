@@ -4,7 +4,7 @@
   "private": true,
   "description": "NestJS server application",
   "scripts": {
-    "build:weapp": "TARO_BUNDLER=webpack NODE_OPTIONS='--openssl-legacy-provider --max-old-space-size=4096' taro build --type weapp",
+    "build:weapp": "TARO_BUNDLER=webpack NODE_OPTIONS='--openssl-legacy-provider --max-old-space-size=4096' taro build --type weapp && node scripts/clean-wxss.js",
     "build:tt": "TARO_BUNDLER=webpack NODE_OPTIONS='--openssl-legacy-provider --max-old-space-size=4096' taro build --type tt",
     "build": "nest build",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:h5\"",
