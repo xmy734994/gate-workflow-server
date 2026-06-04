@@ -1,8 +1,8 @@
-# Node.js 基础镜像（使用完整版而非 Alpine，解决 crypto 模块兼容问题）
-FROM node:18
+# Node.js 基础镜像（使用 Debian 稳定版，兼容 crypto 模块）
+FROM node:18-bullseye
 
 # 设置环境变量，确保 crypto 模块正常工作
-ENV NODE_OPTIONS=--openssl-legacy-provider
+ENV NODE_OPTIONS="--openssl-legacy-provider"
 
 # 设置工作目录
 WORKDIR /app
