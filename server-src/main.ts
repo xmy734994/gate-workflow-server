@@ -1,3 +1,6 @@
+// 必须首先导入 reflect-metadata（NestJS 装饰器需要）
+import 'reflect-metadata';
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '@/app.module';
 import * as express from 'express';
