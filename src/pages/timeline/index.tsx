@@ -231,9 +231,9 @@ export default function Timeline() {
       // 微信订阅消息模板
       if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
         ;(Taro as any).requestSubscribeMessage({
-          tmplIds: ['BOARDING_REMINDER'], // 需要在微信后台配置模板
+          tmplIds: ['0xZsU8hiEHaknqel1TZcKFaRWFAGow4FFCF_tJzM9jI'],
           success: (res: any) => {
-            if (res['BOARDING_REMINDER'] === 'accept') {
+            if (res['0xZsU8hiEHaknqel1TZcKFaRWFAGow4FFCF_tJzM9jI'] === 'accept') {
               // 可以发送订阅消息给用户
               console.log('用户同意了订阅')
             }
