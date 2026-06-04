@@ -10,8 +10,8 @@ WORKDIR /app
 # 复制 package 文件
 COPY package*.json ./
 
-# 安装依赖
-RUN npm install --registry=https://registry.npmmirror.com
+# 安装依赖（使用 --legacy-peer-deps 解决 peer dependency 冲突）
+RUN npm install --registry=https://registry.npmmirror.com --legacy-peer-deps
 
 # 复制配置文件
 COPY tsconfig.json nest-cli.json ./
