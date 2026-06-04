@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, OnModuleInit } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 
 interface WechatConfig {
   appId: string
@@ -23,12 +24,32 @@ interface PendingReminder {
 }
 
 @Injectable()
-export class WechatService {
+export class WechatService implements OnModuleInit {
   private config: WechatConfig | null = null
   private accessToken: string | null = null
   private accessTokenExpire: number = 0
   private userSubscriptions: Map<string, UserSubscription> = new Map()
   private pendingReminders: Map<string, PendingReminder[]> = new Map()
+
+  constructor(private configService: ConfigService) {}
+
+  onModuleInit() {
+    // 从环境变量读取微信配置
+    const appId = this.configService.get<string>('WECHAT_APP_ID')
+    const appSecret = this.configService.get<string>('WECHAT_APP_SECRET')
+    const templateId = this.configService.get<string>('WECHAT_SUBSCRIBE_TEMPLATE_ID') || 'YOUR_TEMPLATE_ID'
+
+    if (appId && appSecret) {
+      this.config = {
+        appId,
+        appSecret,
+        subscribeTemplateId: templateId,
+      }
+      console.log('[WechatService] 微信配置已加载')
+    } else {
+      console.log('[WechatService] 未配置微信环境变量 (WECHAT_APP_ID, WECHAT_APP_SECRET)')
+    }
+  }
 
   setConfig(config: WechatConfig) {
     this.config = config
