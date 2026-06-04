@@ -113,7 +113,7 @@ export class FlightPlanController {
   constructor(private readonly workflowService: WorkflowService) {}
 
   @Post()
-  createFlightPlan(@Body() body: { flightNumber: string; departureTime: number; boardingTime: number; openid?: string }) {
+  createFlightPlan(@Body() body: { flightNumber: string; departureTime: number; boardingTime: number; openid?: string; registrationId?: string }) {
     if (!body.flightNumber || !body.departureTime || !body.boardingTime) {
       return { code: 400, msg: '参数不完整', data: null }
     }
@@ -122,10 +122,11 @@ export class FlightPlanController {
       flightNumber: body.flightNumber.toUpperCase(),
       departureTime: body.departureTime,
       boardingTime: body.boardingTime,
-      openid: body.openid
+      openid: body.openid,
+      registrationId: body.registrationId
     })
     
-    console.log(`[POST] /api/workflow/flights - 创建航班计划: ${plan.flightNumber}, openid: ${body.openid || '未提供'}`)
+    console.log(`[POST] /api/workflow/flights - 创建航班计划: ${plan.flightNumber}, registrationId: ${body.registrationId || '未提供'}`)
     return {
       code: 200,
       msg: 'success',

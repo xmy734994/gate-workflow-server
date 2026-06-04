@@ -220,13 +220,27 @@ export default function Index() {
       openid = await getOpenId()
     }
 
+    // 获取极光推送 RegistrationId（APP环境）
+    let registrationId = Taro.getStorageSync('jpush_registration_id')
+    if (!registrationId && Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+      // APP环境，需要初始化并获取
+      try {
+        const { initJPush, getRegistrationId } = await import('@/lib/jpush')
+        await initJPush()
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        registrationId = await getRegistrationId()
+      } catch (e) {
+        console.log('[Index] 获取 RegistrationId 失败:', e)
+      }
+    }
+
     const planData = {
       flightNumber: formattedFlight,
       departureTime,
       boardingTime
     }
 
-    // 向后端注册航班计划，设置定时提醒（包含 openid）
+    // 向后端注册航班计划，设置定时提醒（包含 openid 和 registrationId）
     try {
       Taro.showLoading({ title: '正在设置提醒...' })
       await Network.request({
@@ -236,7 +250,8 @@ export default function Index() {
           flightNumber: formattedFlight,
           departureTime: departure.getTime(),
           boardingTime: boarding.getTime(),
-          openid: openid || undefined
+          openid: openid || undefined,
+          registrationId: registrationId || undefined
         }
       })
       Taro.hideLoading()
@@ -254,10 +269,6 @@ export default function Index() {
 
   const handleGoToManage = () => {
     Taro.navigateTo({ url: '/pages/manage/index' })
-  }
-
-  const handleGoToSubscribe = () => {
-    Taro.navigateTo({ url: '/pages/subscribe/index' })
   }
 
   const handleGoToRecords = () => {
@@ -409,10 +420,10 @@ export default function Index() {
         <Button 
           variant="outline" 
           className="flex-1"
-          onClick={handleGoToSubscribe}
+          onClick={() => Taro.navigateTo({ url: '/pages/app-push/index' })}
         >
           <Bell size={18} color="#1890ff" className="mr-2" />
-          <Text>通知订阅</Text>
+          <Text>APP推送</Text>
         </Button>
       </View>
 

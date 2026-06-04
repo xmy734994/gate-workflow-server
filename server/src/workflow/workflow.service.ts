@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { WechatService } from '@/wechat/wechat.service'
+import { JpushService } from '@/jpush/jpush.service'
 
 export type RemindType = 'boarding' | 'departure'
 
@@ -18,6 +19,7 @@ export interface FlightPlan {
   departureTime: number  // timestamp
   boardingTime: number   // timestamp
   openid?: string        // 用户的 openid，用于发送订阅消息
+  registrationId?: string // 极光推送的设备 RegistrationID
   reminders: ReminderTask[]
   createdAt: number
 }
@@ -30,6 +32,7 @@ export interface ReminderTask {
   sent: boolean        // 是否已发送
   flightNumber: string
   openid?: string      // 用户的 openid
+  registrationId?: string // 极光推送的设备 RegistrationID
 }
 
 @Injectable()
@@ -49,8 +52,11 @@ export class WorkflowService implements OnModuleInit {
   private pendingReminders: ReminderTask[] = []
   private nextId = 9
 
-  // 注入 WechatService
-  constructor(private wechatService: WechatService) {}
+  // 注入 WechatService 和 JpushService
+  constructor(
+    private wechatService: WechatService,
+    private jpushService: JpushService
+  ) {}
 
   onModuleInit() {
     console.log('[WorkflowService] 服务已初始化，定时检查器已启动')
@@ -278,7 +284,12 @@ export class WorkflowService implements OnModuleInit {
       console.log(`[WorkflowService] 发送提醒: ${task.flightNumber} - ${task.workflowContent}`)
       
       try {
+        // 1. 发送微信订阅消息
         await this.sendWechatNotification(task)
+        
+        // 2. 发送极光推送（APP推送）
+        await this.sendJpushNotification(task)
+        
         this.markReminderSent(task.flightNumber, task.workflowItemId, task.remindTime)
       } catch (error) {
         console.error(`[WorkflowService] 发送提醒失败:`, error)
@@ -290,6 +301,28 @@ export class WorkflowService implements OnModuleInit {
     if (toSend.length > 0) {
       console.log(`[WorkflowService] 本分钟已发送 ${toSend.length} 个提醒`)
     }
+  }
+
+  // 发送极光推送（APP）
+  private async sendJpushNotification(task: ReminderTask): Promise<void> {
+    if (!task.registrationId) {
+      console.log(`[WorkflowService] 任务 ${task.flightNumber} 没有 registrationId，跳过极光推送`)
+      return
+    }
+
+    const timeStr = new Date(task.remindTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    
+    await this.jpushService.sendPush({
+      registrationId: task.registrationId,
+      title: `登机提醒 - ${task.flightNumber}`,
+      content: `${task.workflowContent}\n时间: ${timeStr}`,
+      extras: {
+        flightNumber: task.flightNumber,
+        workflowContent: task.workflowContent,
+        remindTime: String(task.remindTime),
+        type: 'workflow_reminder'
+      }
+    })
   }
 
   // 发送微信订阅消息

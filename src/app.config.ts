@@ -4,7 +4,8 @@ export default defineAppConfig({
     'pages/timeline/index',
     'pages/manage/index',
     'pages/records/index',
-    'pages/subscribe/index'
+    'pages/subscribe/index',
+    'pages/app-push/index'
   ],
   window: {
     backgroundTextStyle: 'light',
