@@ -21,7 +21,7 @@ function parsePort(): number {
       return port;
     }
   }
-  return 3000;
+  return 80;
 }
 
 async function bootstrap() {
