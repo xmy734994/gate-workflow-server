@@ -57,6 +57,23 @@ export default function SubscribePage() {
 
     setBinding(true)
     try {
+      // 0. 先请求微信订阅消息授权（每次点击都弹窗）
+      if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
+        try {
+          const subscribeRes = await (Taro as any).requestSubscribeMessage({
+            tmplIds: ['BOARDING_REMINDER'], // 需要在微信后台配置模板
+          })
+          console.log('订阅消息授权结果:', subscribeRes)
+          if (subscribeRes['BOARDING_REMINDER'] === 'accept') {
+            console.log('用户同意了订阅消息')
+          } else {
+            console.log('用户拒绝了或未响应')
+          }
+        } catch (subErr) {
+          console.error('订阅消息授权失败:', subErr)
+        }
+      }
+
       // 1. 调用 wx.login 获取 code
       const loginRes = await Taro.login()
       if (!loginRes.code) {

@@ -189,7 +189,7 @@ export default function Timeline() {
         if (isMiniApp && flightPlan) {
           try {
             // 获取用户订阅状态
-            const subscriptions = Taro.getStorageSync('user_subscriptions') || {}
+            const subscriptions = Taro.getStorageSync('push_subscriptions') || {}
             if (subscriptions[item.type]) {
               // 调用订阅消息 API
               await triggerSubscribeMessage(item, flightPlan)
