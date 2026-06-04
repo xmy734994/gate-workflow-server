@@ -259,7 +259,7 @@ export class JpushService {
       return s
     }
 
-    function hex(x: number[]): string {
+    function hex(x: string[]): string {
       for (let i = 0; i < x.length; i++) {
         x[i] = rhex(x[i])
       }

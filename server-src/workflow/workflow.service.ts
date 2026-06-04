@@ -315,7 +315,7 @@ export class WorkflowService implements OnModuleInit {
     const timeStr = new Date(task.remindTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     
     await this.jpushService.sendPush({
-      registrationId: task.registrationId,
+      clientId: task.registrationId,
       title: `登机提醒 - ${task.flightNumber}`,
       content: `${task.workflowContent}\n时间: ${timeStr}`,
       extras: {
