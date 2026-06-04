@@ -11,7 +11,7 @@ COPY package*.json ./
 RUN npm install --registry=https://registry.npmmirror.com
 
 # 复制源代码
-COPY . .
+COPY server-src ./src
 
 # 构建 TypeScript
 RUN npm run build
