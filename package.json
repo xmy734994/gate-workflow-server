@@ -4,10 +4,12 @@
   "private": true,
   "description": "NestJS server application",
   "scripts": {
+    "build:weapp": "NODE_OPTIONS='--max-old-space-size=4096' taro build --type weapp",
+    "build:tt": "NODE_OPTIONS='--max-old-space-size=4096' taro build --type tt",
     "build": "nest build",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:h5\"",
     "dev:server": "nest start --watch",
-    "dev:h5": "NODE_OPTIONS='--max-old-space-size=8192' taro build --type h5 --watch",
+    "dev:h5": "NODE_OPTIONS='--max-old-space-size=4096' taro build --type h5 --watch",
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main"
