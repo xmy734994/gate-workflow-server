@@ -4,7 +4,7 @@ import path from 'path'
 const devConfig: IConfig = {
   mini: {},
   h5: {
-    // Disable prebundle via env variable
+    prebundleOptions: { enable: false },
   },
 }
 
