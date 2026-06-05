@@ -19,10 +19,11 @@
     "noFallthroughCasesInSwitch": false,
     "esModuleInterop": true,
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./server-src/*"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["server-src/**/*"],
+  "include": ["src/**/*", "config/**/*"],
   "exclude": ["node_modules", "dist"]
 }

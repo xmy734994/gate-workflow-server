@@ -1,9 +1,11 @@
-import type { UserConfigExport } from "@tarojs/cli"
+import type { IConfig } from '@tarojs/taro'
+import path from 'path'
 
-export default {
-  
-  mini: {
-    debugReact: true,
+const devConfig: IConfig = {
+  mini: {},
+  h5: {
+    // Disable prebundle via env variable
   },
-  h5: {}
-} satisfies UserConfigExport<'vite'>
+}
+
+export default devConfig
